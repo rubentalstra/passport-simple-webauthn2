@@ -11,7 +11,8 @@
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
-    "lint": "eslint --fix ."
+    "lint": "eslint --fix .",
+    "docs": "typedoc --out docs src/index.ts"
   },
   "repository": {
     "type": "git",
@@ -22,7 +23,8 @@
     "webauthn",
     "passkeys",
     "fido",
-    "node"
+    "node",
+    "passport"
   ],
   "author": "Ruben Talstra",
   "license": "MIT",
@@ -53,6 +55,7 @@
     "ts-node": "^10.9.2",
     "tsup": "^8.3.6",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.22.0"
+    "typescript-eslint": "^8.22.0",
+    "typedoc": "^0.27.6"
   }
 }

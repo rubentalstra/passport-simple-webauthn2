@@ -1,3 +1,7 @@
+/**
+ * @module SimpleWebAuthnStrategy
+ */
+
 export { SimpleWebAuthnStrategy } from "./strategy/SimpleWebAuthnStrategy";
 export {
   generateRegistration,

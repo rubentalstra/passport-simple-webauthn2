@@ -10,11 +10,28 @@ import {
 } from "@simplewebauthn/server";
 import { saveChallenge, getChallenge, clearChallenge } from "./challengeStore";
 
+/**
+ * Represents a user during the authentication process.
+ */
 export interface AuthUser {
+  /**
+   * Unique identifier for the user as a Uint8Array.
+   */
   id: Uint8Array;
+
+  /**
+   * Array of WebAuthn credentials associated with the user.
+   */
   credentials: WebAuthnCredential[];
 }
 
+/**
+ * Generates authentication options for an existing WebAuthn credential.
+ *
+ * @param req - Express request object.
+ * @returns The authentication options.
+ * @throws Error if the user is not authenticated or challenge saving fails.
+ */
 export const generateAuthentication = async (req: Request) => {
   if (!req.session.userId) throw new Error("User not authenticated");
 
@@ -28,6 +45,15 @@ export const generateAuthentication = async (req: Request) => {
   return options;
 };
 
+/**
+ * Verifies the authentication response from the client.
+ *
+ * @param req - Express request object.
+ * @param user - The user attempting to authenticate.
+ * @param response - The authentication response JSON from the client.
+ * @returns The verified authentication response.
+ * @throws Error if challenge is missing, credential is not found, or verification fails.
+ */
 export const verifyAuthentication = async (
   req: Request,
   user: AuthUser,

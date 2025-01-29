@@ -1,7 +1,13 @@
 import "express-session";
 
+/**
+ * Extends the express-session module to include a `userId` property.
+ */
 declare module "express-session" {
   interface SessionData {
-    userId?: string; // Ensure `userId` exists on the session object
+    /**
+     * The unique identifier for the authenticated user.
+     */
+    userId?: string;
   }
 }
