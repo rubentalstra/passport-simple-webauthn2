@@ -1,5 +1,15 @@
-export function add(a: number, b: number): number {
-    return a + b;
-}
-
-console.log(add(3, 5)); //output: 8
+export { SimpleWebAuthnStrategy } from "./strategy/SimpleWebAuthnStrategy";
+export {
+  generateRegistration,
+  verifyRegistration,
+} from "./strategy/registration";
+export {
+  generateAuthentication,
+  verifyAuthentication,
+} from "./strategy/authentication";
+export {
+  saveChallenge,
+  getChallenge,
+  clearChallenge,
+} from "./strategy/challengeStore";
+export type { UserModel, Passkey } from "./models/types";
