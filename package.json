@@ -1,0 +1,43 @@
+{
+  "name": "passport-simple-webauthn2",
+  "version": "0.0.1",
+  "description": "Passport strategy for authenticating with Web Authentication.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rubentalstra/passport-simple-webauthn.git"
+  },
+  "keywords": [
+    "typescript",
+    "webauthn",
+    "passkeys",
+    "fido",
+    "node"
+  ],
+  "author": "Ruben Talstra",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/rubentalstra/passport-simple-webauthn/issues"
+  },
+  "homepage": "https://github.com/rubentalstra/passport-simple-webauthn#readme",
+  "dependencies": {
+    "@simplewebauthn/server": "^13.1.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3"
+  }
+}
