@@ -57,7 +57,6 @@ export const generateRegistration = async (
       residentKey: "preferred",
       userVerification: "preferred",
     },
-    supportedAlgorithmIDs: [-7, -257],
   });
 
   await saveChallenge(
