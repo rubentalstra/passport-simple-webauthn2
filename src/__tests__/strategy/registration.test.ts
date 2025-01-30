@@ -6,6 +6,7 @@ import {
     RegistrationResponseJSON,
     verifyRegistrationResponse,
     VerifiedRegistrationResponse,
+    PublicKeyCredentialCreationOptionsJSON,
 } from "@simplewebauthn/server";
 import { saveChallenge, getChallenge, clearChallenge } from "../../strategy/challengeStore";
 import { RegistrationUser } from "../../strategy/registration";
@@ -56,14 +57,18 @@ describe("Registration Utility Functions", () => {
                     name: userMock.name,
                     displayName: userMock.displayName,
                 },
-                pubKeyCredParams:
-                [{ type: "public-key", alg: -8 }, { type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+                pubKeyCredParams: [
+                    { type: "public-key", alg: -8 },
+                    { type: "public-key", alg: -7 },
+                    { type: "public-key", alg: -257 }
+                ],
                 authenticatorSelection: {
                     residentKey: "preferred",
                     userVerification: "preferred",
                 },
                 attestation: "direct",
             });
+
 
             await generateRegistration(reqMock as Request, userMock);
 
@@ -77,7 +82,7 @@ describe("Registration Utility Functions", () => {
                     residentKey: "preferred",
                     userVerification: "preferred",
                 },
-                supportedAlgorithmIDs: [-8, -7, -257], // Corrected key
+                supportedAlgorithmIDs: [-8, -7, -257],
             });
 
             expect(mockedSaveChallenge).toHaveBeenCalledWith(
@@ -111,7 +116,6 @@ describe("Registration Utility Functions", () => {
             // Ensure saveChallenge is not called on failure
             expect(mockedSaveChallenge).not.toHaveBeenCalled();
         });
-    });
 
     describe("verifyRegistration", () => {
         it("should verify registration and clear challenge on success", async () => {
