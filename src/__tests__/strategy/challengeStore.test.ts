@@ -1,4 +1,4 @@
-import { saveChallenge, getChallenge, clearChallenge, resetChallengeStore } from "passport-simple-webauthn2";
+import { saveChallenge, getChallenge, clearChallenge, resetChallengeStore } from "../../strategy/challengeStore";
 import type { Request } from "express";
 
 describe("Challenge Store Functions", () => {
