@@ -10,7 +10,8 @@ export { SimpleWebAuthnStrategy } from "./strategy/SimpleWebAuthnStrategy";
 export {
   generateRegistration,
   verifyRegistration,
-} from "./strategy/registration";
+} from "./strategy/verifyRegistration";
+export { verifyAuthentication } from "./strategy/verifyAuthentication";
 export {
   saveChallenge,
   getChallenge,

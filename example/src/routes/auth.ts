@@ -6,21 +6,37 @@ import {
     verifyRegistration,
     Passkey,
 } from "passport-simple-webauthn2";
-import type { WebAuthnCredential, RegistrationResponseJSON } from "@simplewebauthn/server";
+import { findUserByUsername, createUser } from "../models/user";
 
 const router = express.Router();
 
 /**
- * **[1] Registration Initiation**
- * - Uses `req.user` to register the authenticated user.
- * - Generates WebAuthn registration options.
+ * **[1] User Signup**
+ * - Creates a new user.
  */
-// @ts-ignore
+router.post("/signup", (req: Request, res: Response) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: "Username is required" });
+
+    let user = findUserByUsername(username);
+    if (user) return res.status(409).json({ error: "Username already exists" });
+
+    user = createUser(username);
+    req.login(user, (err) => {
+        if (err) return res.status(500).json({ error: "Signup failed" });
+        res.json({ user });
+    });
+});
+
+/**
+ * **[2] Registration Initiation**
+ * - Uses `req.user` to register the authenticated user.
+ */
 router.post("/register", async (req: Request, res: Response) => {
-    // if (!req.user) return res.status(401).json({ error: "User not authenticated" });
+    if (!req.user) return res.status(401).json({ error: "User not authenticated" });
 
     try {
-        const registrationOptions = await generateRegistration(req);
+        const registrationOptions = await generateRegistration(req.user);
         res.json(registrationOptions);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -28,10 +44,8 @@ router.post("/register", async (req: Request, res: Response) => {
 });
 
 /**
- * **[2] Registration Verification**
- * - Verifies WebAuthn response and stores credential.
+ * **[3] Registration Verification**
  */
-// @ts-ignore
 router.post("/register/verify", async (req: Request, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "User not authenticated" });
 
@@ -39,19 +53,9 @@ router.post("/register/verify", async (req: Request, res: Response) => {
     if (!response) return res.status(400).json({ error: "Missing WebAuthn response" });
 
     try {
-        const verification = await verifyRegistration(req, response as RegistrationResponseJSON);
-
-        response.counter
-        if (verification.verified && verification.registrationInfo) {
-            const newCredential: WebAuthnCredential = {
-                id: response.credentialID,
-                publicKey: response.credentialPublicKey,
-                counter: response.counter,
-                transports: response.transports || [],
-            };
-
-            (req.user as any).credentials.push(newCredential as Passkey);
-        }
+        const verification = await verifyRegistration(response, findUserById, async (passkey) => {
+            (req.user as any).credentials.push(passkey);
+        });
 
         res.json({ verified: verification.verified });
     } catch (error: any) {
@@ -59,50 +63,41 @@ router.post("/register/verify", async (req: Request, res: Response) => {
     }
 });
 
-
 /**
- * **[3] Authentication Initiation**
- * - Uses `req.user` to generate authentication options.
+ * **[4] Authentication Initiation**
  */
-// @ts-ignore
 router.post("/login", async (req: Request, res: Response) => {
-    if (!req.user) return res.status(401).json({ error: "User not authenticated" });
+    const { username } = req.body;
+    const user = findUserByUsername(username);
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-    try {
-        const authOptions = await generateAuthentication(req);
-        res.json(authOptions);
-    } catch (error: any) {
-        res.status(500).json({ error: error.message });
-    }
+    req.login(user, async (err) => {
+        if (err) return res.status(500).json({ error: "Login failed" });
+
+        try {
+            const authOptions = await generateAuthentication(user);
+            res.json(authOptions);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
 });
 
 /**
- * **[4] Authentication Verification**
- * - Uses Passport middleware to authenticate via WebAuthn.
+ * **[5] Authentication Verification**
  */
 router.post("/login/verify", passport.authenticate("simple-webauthn"), (req, res) => {
     res.json({ authenticated: true });
 });
 
 /**
- * **[5] Logout**
- * - Ends the user session.
+ * **[6] Logout**
  */
 router.post("/logout", (req, res) => {
     req.logout((err) => {
-        if (err) {
-            return res.status(500).json({ error: "Failed to logout." });
-        }
+        if (err) return res.status(500).json({ error: "Failed to logout." });
         res.json({ loggedOut: true });
     });
-});
-
-/**
- * **[6] Login Failure Route**
- * - Handles failed authentication attempts.
- */
-router.get("/login-failure", (req, res) => {
-    res.status(401).json({ error: "Authentication failed." });
 });
 
 export default router;

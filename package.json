@@ -1,6 +1,6 @@
 {
   "name": "passport-simple-webauthn2",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Passport strategy for authenticating with Web Authentication (WebAuthn) using FIDO2 Passkeys.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

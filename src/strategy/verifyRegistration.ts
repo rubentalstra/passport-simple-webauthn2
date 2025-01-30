@@ -1,0 +1,115 @@
+import type {
+  RegistrationResponseJSON,
+  VerifiedRegistrationResponse,
+  PublicKeyCredentialCreationOptionsJSON,
+} from "@simplewebauthn/server";
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+} from "@simplewebauthn/server";
+import { saveChallenge, getChallenge, clearChallenge } from "./challengeStore";
+import type { UserModel, Passkey } from "../models/types";
+
+/**
+ * Generates registration options for a new WebAuthn credential.
+ * @param user - The user requesting registration.
+ * @returns A promise that resolves to the registration options JSON.
+ */
+export const generateRegistration = async (
+  user: UserModel,
+): Promise<PublicKeyCredentialCreationOptionsJSON> => {
+  try {
+    const options = await generateRegistrationOptions({
+      rpName: process.env.RP_NAME || "Example RP",
+      rpID: process.env.RP_ID || "example.com",
+      userID: Buffer.from(user.id), // Ensure user ID is passed correctly
+      userName: user.username,
+      attestationType: "none", // For smoother UX
+      authenticatorSelection: {
+        residentKey: "preferred",
+        userVerification: "preferred",
+        authenticatorAttachment: "platform", // Optional
+      },
+      supportedAlgorithmIDs: [-7, -257, -8], // ES256, RS256, EdDSA
+    });
+
+    await saveChallenge(user.id, options.challenge);
+    return options;
+  } catch (error: any) {
+    console.error("Error generating registration options:", error);
+    throw new Error("Failed to generate registration options");
+  }
+};
+
+/**
+ * Verifies the registration response from the client.
+ * @param response - The registration response JSON from the client.
+ * @param findUserByWebAuthnID - Function to find a user by their WebAuthn ID.
+ * @param registerPasskey - Function to store the new passkey in the database.
+ * @returns A promise that resolves to the verified registration response.
+ */
+export const verifyRegistration = async (
+  response: RegistrationResponseJSON,
+  findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>,
+  registerPasskey: (passkey: Passkey) => Promise<void>,
+): Promise<VerifiedRegistrationResponse> => {
+  try {
+    if (!response || !response.id) {
+      throw new Error("Invalid registration response");
+    }
+
+    const storedChallenge = await getChallenge(response.id);
+    if (!storedChallenge) {
+      throw new Error("Challenge expired or missing");
+    }
+
+    const verification = await verifyRegistrationResponse({
+      response,
+      expectedChallenge: storedChallenge,
+      expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
+      expectedRPID: process.env.RP_ID || "example.com",
+      requireUserVerification: true,
+    });
+
+    if (!verification.verified || !verification.registrationInfo) {
+      throw new Error("Registration verification failed");
+    }
+
+    // Extract userHandle from the response (Fix TS2339 error)
+    const webauthnUserID = response.id;
+    if (!webauthnUserID) {
+      throw new Error(
+        "User handle (WebAuthn user ID) missing in registration response",
+      );
+    }
+
+    // Fetch user from the database
+    const user = await findUserByWebAuthnID(webauthnUserID);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Create new passkey object
+    const passkey: Passkey = {
+      id: verification.registrationInfo.credential.id,
+      publicKey: verification.registrationInfo.credential.publicKey,
+      counter: verification.registrationInfo.credential.counter,
+      webauthnUserID,
+      transports: verification.registrationInfo.credential.transports ?? [],
+      deviceType: verification.registrationInfo.credentialDeviceType,
+      backedUp: verification.registrationInfo.credentialBackedUp,
+      user,
+    };
+
+    // Store the new passkey in the database
+    await registerPasskey(passkey);
+    await clearChallenge(response.id);
+
+    return verification;
+  } catch (error) {
+    console.error("Registration verification error:", error);
+    throw new Error(
+      error instanceof Error ? error.message : "Unknown registration error",
+    );
+  }
+};

@@ -5,25 +5,23 @@ import type {
 } from "@simplewebauthn/server";
 
 /**
- * User model representing your application's user.
+ * User model representing a user in the application.
  */
 export type UserModel = {
-  id: string; // Unique identifier for the user
+  id: any;
   username: string;
-  displayName?: string;
-  credentials: Passkey[]; // Array of associated passkeys
 };
 
 /**
  * Passkey model representing a WebAuthn credential.
  */
 export type Passkey = {
-  id: Base64URLString; // Base64URL-encoded credential ID
-  publicKey: Uint8Array; // PEM-encoded public key
-  user: UserModel; // Associated user
-  webauthnUserID: Base64URLString; // User ID used in WebAuthn
-  counter: number; // Signature counter to prevent replay attacks
-  deviceType: CredentialDeviceType; // 'platform' or 'cross-platform'
-  backedUp: boolean; // Indicates if the passkey is backed up
-  transports?: AuthenticatorTransportFuture[]; // ['usb', 'nfc', etc.]
+  id: Base64URLString; // Credential ID
+  publicKey: Uint8Array; // Public Key as raw bytes
+  user: UserModel; // Linked user
+  webauthnUserID: Base64URLString; // WebAuthn user ID
+  counter: number; // Prevents replay attacks
+  deviceType: CredentialDeviceType; // 'singleDevice' or 'multiDevice'
+  backedUp: boolean; // Backup flag
+  transports?: AuthenticatorTransportFuture[]; // Array of transport types
 };

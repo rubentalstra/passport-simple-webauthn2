@@ -4,37 +4,22 @@ import type {
   VerifiedAuthenticationResponse,
   VerifiedRegistrationResponse,
 } from "@simplewebauthn/server";
-import { verifyAuthentication } from "./authentication";
-import { verifyRegistration } from "./registration";
-import type { UserModel } from "../models/types";
+import { verifyAuthenticationResponse } from "@simplewebauthn/server";
+import { verifyRegistrationResponse } from "@simplewebauthn/server";
+import { getChallenge, clearChallenge } from "./challengeStore";
+import type { UserModel, Passkey } from "../models/types";
 
 /**
  * Options for the SimpleWebAuthnStrategy.
  */
 interface SimpleWebAuthnStrategyOptions {
-  /**
-   * Function to verify authentication responses.
-   * @param credentialID - The credential ID from the authentication response.
-   * @param cb - Callback function to handle the verification result.
-   */
-  verify: (
+  findPasskeyByCredentialID: (credentialID: string) => Promise<Passkey | null>;
+  updatePasskeyCounter: (
     credentialID: string,
-    cb: (error: any, user?: UserModel, publicKey?: string) => void,
-  ) => void;
-
-  /**
-   * Function to handle registration of new credentials.
-   * @param user - The user object.
-   * @param credentialID - The credential ID from the registration response.
-   * @param publicKey - The PEM-encoded public key.
-   * @param cb - Callback function to handle the registration result.
-   */
-  register: (
-    user: UserModel,
-    credentialID: string,
-    publicKey: string,
-    cb: (error: any, user?: UserModel) => void,
-  ) => void;
+    newCounter: number,
+  ) => Promise<void>;
+  findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>;
+  registerPasskey: (user: UserModel, passkey: Passkey) => Promise<void>;
 }
 
 /**
@@ -42,23 +27,22 @@ interface SimpleWebAuthnStrategyOptions {
  */
 export class SimpleWebAuthnStrategy extends Strategy {
   public name = "simple-webauthn";
-  private readonly verifyFunc: SimpleWebAuthnStrategyOptions["verify"];
-  private readonly registerFunc: SimpleWebAuthnStrategyOptions["register"];
+
+  private readonly findPasskeyByCredentialID: SimpleWebAuthnStrategyOptions["findPasskeyByCredentialID"];
+  private readonly updatePasskeyCounter: SimpleWebAuthnStrategyOptions["updatePasskeyCounter"];
+  private readonly findUserByWebAuthnID: SimpleWebAuthnStrategyOptions["findUserByWebAuthnID"];
+  private readonly registerPasskey: SimpleWebAuthnStrategyOptions["registerPasskey"];
 
   constructor(options: SimpleWebAuthnStrategyOptions) {
     super();
-    this.verifyFunc = options.verify;
-    this.registerFunc = options.register;
+    this.findPasskeyByCredentialID = options.findPasskeyByCredentialID;
+    this.updatePasskeyCounter = options.updatePasskeyCounter;
+    this.findUserByWebAuthnID = options.findUserByWebAuthnID;
+    this.registerPasskey = options.registerPasskey;
   }
 
-  /**
-   * Authenticate request based on WebAuthn response.
-   * @param req - The Express request object.
-   * @param options
-   */
-  authenticate(req: Request, options?: any): void {
-    const action = req.path.split("/").pop(); // e.g., 'login' or 'register'
-
+  authenticate(req: Request): void {
+    const action = req.path.split("/").pop();
     if (action === "login") {
       this.handleAuthentication(req);
     } else if (action === "register") {
@@ -68,86 +52,96 @@ export class SimpleWebAuthnStrategy extends Strategy {
     }
   }
 
-  /**
-   * Handle authentication requests.
-   * @param req - The Express request object.
-   */
   private async handleAuthentication(req: Request): Promise<void> {
     try {
       const { response } = req.body;
-      if (!response) {
+      if (!response)
         return this.fail({ message: "Missing response data" }, 400);
-      }
+
+      const storedChallenge = await getChallenge(response.id);
+      if (!storedChallenge)
+        return this.fail({ message: "Challenge expired or missing" }, 403);
+
+      const passkey = await this.findPasskeyByCredentialID(response.id);
+      if (!passkey) return this.fail({ message: "Credential not found" }, 404);
 
       const verification: VerifiedAuthenticationResponse =
-        await verifyAuthentication(req, response);
+        await verifyAuthenticationResponse({
+          response,
+          expectedChallenge: storedChallenge,
+          expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
+          expectedRPID: process.env.RP_ID || "example.com",
+          credential: {
+            id: passkey.id,
+            publicKey: passkey.publicKey,
+            counter: passkey.counter,
+            transports: passkey.transports ?? [],
+          },
+          requireUserVerification: true,
+        });
 
-      if (!verification.verified) {
+      if (!verification.verified)
         return this.fail({ message: "Verification failed" }, 403);
-      }
 
-      const credentialID = verification.authenticationInfo.credentialID;
+      await this.updatePasskeyCounter(
+        passkey.id,
+        verification.authenticationInfo.newCounter,
+      );
+      await clearChallenge(response.id);
 
-      if (!credentialID) {
-        return this.fail({ message: "Invalid verification information" }, 400);
-      }
-
-      this.verifyFunc(credentialID, (err, user, publicKey) => {
-        if (err) {
-          return this.error(err);
-        }
-        if (!user) {
-          return this.fail({ message: "User not found" }, 404);
-        }
-        return this.success(user);
-      });
+      this.success(passkey.user);
     } catch (error) {
-      return this.error(
+      this.error(
         error instanceof Error ? error : new Error("An unknown error occurred"),
       );
     }
   }
 
-  /**
-   * Handle registration requests.
-   * @param req - The Express request object.
-   */
   private async handleRegistration(req: Request): Promise<void> {
     try {
       const { response } = req.body;
-      if (!response) {
+      if (!response)
         return this.fail({ message: "Missing response data" }, 400);
-      }
+
+      const storedChallenge = await getChallenge(response.id);
+      if (!storedChallenge)
+        return this.fail({ message: "Challenge expired or missing" }, 403);
 
       const verification: VerifiedRegistrationResponse =
-        await verifyRegistration(req, response);
+        await verifyRegistrationResponse({
+          response,
+          expectedChallenge: storedChallenge,
+          expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
+          expectedRPID: process.env.RP_ID || "example.com",
+          requireUserVerification: true,
+        });
 
       if (!verification.verified || !verification.registrationInfo) {
         return this.fail({ message: "Registration verification failed" }, 403);
       }
 
-      const { credential } = verification.registrationInfo;
-
-      if (!credential) {
-        return this.fail({ message: "Invalid registration information" }, 400);
-      }
-
-      this.registerFunc(
-        req.user as UserModel,
-        credential.id,
-        Buffer.from(credential.publicKey).toString("base64url"),
-        (err, registeredUser) => {
-          if (err) {
-            return this.error(err);
-          }
-          if (!registeredUser) {
-            return this.fail({ message: "Registration failed" }, 500);
-          }
-          return this.success(registeredUser);
-        },
+      const user = await this.findUserByWebAuthnID(
+        verification.registrationInfo.credential.id,
       );
+      if (!user) return this.fail({ message: "User not found" }, 404);
+
+      const newPasskey: Passkey = {
+        id: verification.registrationInfo.credential.id,
+        publicKey: verification.registrationInfo.credential.publicKey,
+        counter: verification.registrationInfo.credential.counter,
+        webauthnUserID: user.id,
+        transports: verification.registrationInfo.credential.transports ?? [],
+        deviceType: verification.registrationInfo.credentialDeviceType,
+        backedUp: verification.registrationInfo.credentialBackedUp,
+        user,
+      };
+
+      await this.registerPasskey(user, newPasskey);
+      await clearChallenge(response.id);
+
+      this.success(user);
     } catch (error) {
-      return this.error(
+      this.error(
         error instanceof Error ? error : new Error("An unknown error occurred"),
       );
     }

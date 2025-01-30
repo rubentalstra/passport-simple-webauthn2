@@ -6,7 +6,7 @@ const router = express.Router();
 router.use("/auth", authRoutes);
 
 router.get("/", (req, res) => {
-    res.send("Welcome to the SimpleWebAuthn Example!");
+    res.send("✅ SimpleWebAuthn Example Server Running!");
 });
 
 export default router;
