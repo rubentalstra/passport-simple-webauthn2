@@ -12,13 +12,9 @@ export {
   verifyRegistration,
 } from "./strategy/registration";
 export {
-  generateAuthentication,
-  verifyAuthentication,
-} from "./strategy/authentication";
-export {
   saveChallenge,
   getChallenge,
   clearChallenge,
   resetChallengeStore,
 } from "./strategy/challengeStore";
-export type { Passkey } from "./models/types";
+export type { Passkey, UserModel } from "./models/types";

@@ -1,6 +1,6 @@
 import express from "express";
 import session from "express-session";
-import passport from "passport";
+import passport from "./passport";
 import routes from "./routes";
 import dotenv from "dotenv";
 import path from "path";

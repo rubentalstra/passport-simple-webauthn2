@@ -1,42 +1,11 @@
 import type { Request } from "express";
 import type {
-  PublicKeyCredentialRequestOptionsJSON,
-  VerifiedAuthenticationResponse,
   AuthenticationResponseJSON,
-  WebAuthnCredential,
+  VerifiedAuthenticationResponse,
 } from "@simplewebauthn/server";
-import {
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse,
-} from "@simplewebauthn/server";
-import { saveChallenge, getChallenge, clearChallenge } from "./challengeStore";
-
-/**
- * Generates authentication options for an existing WebAuthn credential.
- * @param req - The Express request object.
- * @returns A promise that resolves to the authentication options JSON.
- */
-export const generateAuthentication = async (
-  req: Request,
-): Promise<PublicKeyCredentialRequestOptionsJSON> => {
-  if (!req.user) throw new Error("User not authenticated");
-
-  const user = req.user as { id: string; credentials: WebAuthnCredential[] };
-  const userCredentials = user.credentials.map((cred) => ({
-    id: cred.id as string,
-    transports: cred.transports || [],
-  }));
-
-  const options = await generateAuthenticationOptions({
-    rpID: process.env.RP_ID || "example.com",
-    allowCredentials: userCredentials.length > 0 ? userCredentials : undefined,
-    timeout: 60000,
-    userVerification: "preferred",
-  });
-
-  await saveChallenge(req, user.id, options.challenge);
-  return options;
-};
+import { verifyAuthenticationResponse } from "@simplewebauthn/server";
+import { getChallenge, clearChallenge } from "./challengeStore";
+import type { UserModel, Passkey } from "../models/types";
 
 /**
  * Verifies the authentication response from the client.
@@ -50,24 +19,48 @@ export const verifyAuthentication = async (
 ): Promise<VerifiedAuthenticationResponse> => {
   if (!req.user) throw new Error("User not authenticated");
 
-  const user = req.user as { id: string; credentials: WebAuthnCredential[] };
+  const user = req.user as UserModel;
   const storedChallenge = await getChallenge(req, user.id);
   if (!storedChallenge) throw new Error("Challenge expired or missing");
 
-  const credential = user.credentials.find((cred) => cred.id === response.id);
-  if (!credential) throw new Error("Credential not found");
+  const passkey = user.credentials.find((cred) => cred.id === response.id);
+  if (!passkey) throw new Error("Credential not found");
 
   const verification = await verifyAuthenticationResponse({
     response,
     expectedChallenge: storedChallenge,
     expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
     expectedRPID: process.env.RP_ID || "example.com",
-    credential,
+    credential: {
+      id: passkey.id,
+      publicKey: passkey.publicKey,
+      counter: passkey.counter,
+      transports: passkey.transports,
+    },
     requireUserVerification: true,
   });
 
   if (!verification.verified) throw new Error("Authentication failed");
 
+  // Update the counter in your DB to prevent replay attacks
+  passkey.counter = verification.authenticationInfo.newCounter;
+  await updatePasskeyCounter(passkey); // Implement this function
+
   await clearChallenge(req, user.id);
   return verification;
 };
+
+/**
+ * Updates the counter for a passkey in the database.
+ * @param passkey - The passkey whose counter needs to be updated.
+ */
+async function updatePasskeyCounter(passkey: Passkey): Promise<void> {
+  // Implement your database update logic here
+  // Example using a hypothetical ORM or database client:
+  // await db.passkeys.updateOne({ id: passkey.id }, { $set: { counter: passkey.counter } });
+
+  // Placeholder implementation:
+  console.log(
+    `Updating counter for passkey ID: ${passkey.id} to ${passkey.counter}`,
+  );
+}

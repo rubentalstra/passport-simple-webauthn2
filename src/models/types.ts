@@ -5,42 +5,25 @@ import type {
 } from "@simplewebauthn/server";
 
 /**
- * Represents a WebAuthn passkey associated with a user.
+ * User model representing your application's user.
+ */
+export type UserModel = {
+  id: string; // Unique identifier for the user
+  username: string;
+  displayName?: string;
+  credentials: Passkey[]; // Array of associated passkeys
+};
+
+/**
+ * Passkey model representing a WebAuthn credential.
  */
 export type Passkey = {
-  /**
-   * Credential ID in Base64URL format.
-   */
-  id: Base64URLString;
-
-  /**
-   * Public key as a Uint8Array.
-   */
-  publicKey: Uint8Array;
-
-  /**
-   * WebAuthn user ID associated with this passkey.
-   */
-  webauthnUserID: Base64URLString;
-
-  /**
-   * Signature counter for replay attack prevention.
-   */
-  counter: number;
-
-  /**
-   * Type of device: either `singleDevice` or `multiDevice`.
-   */
-  deviceType: CredentialDeviceType;
-
-  /**
-   * Indicates if the credential is backed up.
-   */
-  backedUp: boolean;
-
-  /**
-   * Array of authenticator transport methods.
-   * Examples: ['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb']
-   */
-  transports?: AuthenticatorTransportFuture[];
+  id: Base64URLString; // Base64URL-encoded credential ID
+  publicKey: Uint8Array; // PEM-encoded public key
+  user: UserModel; // Associated user
+  webauthnUserID: Base64URLString; // User ID used in WebAuthn
+  counter: number; // Signature counter to prevent replay attacks
+  deviceType: CredentialDeviceType; // 'platform' or 'cross-platform'
+  backedUp: boolean; // Indicates if the passkey is backed up
+  transports?: AuthenticatorTransportFuture[]; // ['usb', 'nfc', etc.]
 };

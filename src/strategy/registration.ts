@@ -1,15 +1,15 @@
 import type { Request } from "express";
 import type {
-  PublicKeyCredentialCreationOptionsJSON,
-  VerifiedRegistrationResponse,
   RegistrationResponseJSON,
-  WebAuthnCredential,
+  VerifiedRegistrationResponse,
+  PublicKeyCredentialCreationOptionsJSON,
 } from "@simplewebauthn/server";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import { saveChallenge, getChallenge, clearChallenge } from "./challengeStore";
+import type { UserModel } from "../models/types";
 
 /**
  * Generates registration options for a new WebAuthn credential.
@@ -21,25 +21,22 @@ export const generateRegistration = async (
 ): Promise<PublicKeyCredentialCreationOptionsJSON> => {
   if (!req.user) throw new Error("User not authenticated");
 
-  const user = req.user as {
-    id: string;
-    name: string;
-    displayName: string;
-    credentials: WebAuthnCredential[];
-  };
+  const user = req.user as UserModel;
 
   const options = await generateRegistrationOptions({
     rpName: process.env.RP_NAME || "Example RP",
     rpID: process.env.RP_ID || "example.com",
     userID: Buffer.from(user.id),
-    userName: user.name,
-    userDisplayName: user.displayName || user.name,
-    attestationType: "direct",
+    userName: user.username,
+    userDisplayName: user.displayName || user.username,
+    attestationType: "none", // For smoother UX
     authenticatorSelection: {
       residentKey: "preferred",
       userVerification: "preferred",
+      authenticatorAttachment: "platform", // Optional
     },
-    supportedAlgorithmIDs: [-8, -7, -257],
+    supportedAlgorithmIDs: [-7, -257, -8], // ES256, RS256, EdDSA
+    // Optionally add preferredAuthenticatorType if needed
     preferredAuthenticatorType: "securityKey",
   });
 
@@ -59,7 +56,7 @@ export const verifyRegistration = async (
 ): Promise<VerifiedRegistrationResponse> => {
   if (!req.user) throw new Error("User not authenticated");
 
-  const user = req.user as { id: string };
+  const user = req.user as UserModel;
   const storedChallenge = await getChallenge(req, user.id);
   if (!storedChallenge) throw new Error("Challenge expired or missing");
 
@@ -68,9 +65,11 @@ export const verifyRegistration = async (
     expectedChallenge: storedChallenge,
     expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
     expectedRPID: process.env.RP_ID || "example.com",
+    requireUserVerification: true,
+    supportedAlgorithmIDs: [-7, -257, -8], // ES256, RS256, EdDSA
   });
 
-  if (!verification.verified)
+  if (!verification.verified || !verification.registrationInfo)
     throw new Error("Registration verification failed");
 
   await clearChallenge(req, user.id);

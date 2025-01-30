@@ -1,19 +1,25 @@
-// src/models/user.ts
-import { Passkey, UserModel } from "passport-simple-webauthn2";
+import { Passkey } from "passport-simple-webauthn2";
 import crypto from "crypto";
 
 /**
  * Represents a user in the application.
  */
-export interface User extends UserModel {
-    /**
-     * Array of WebAuthn credentials associated with the user.
-     */
+export interface User {
+    id: string;
+    username: string;
     credentials: Passkey[];
 }
 
 const users: Map<string, User> = new Map();
 
+/**
+ * Finds a user by their ID.
+ * @param id - The user's ID.
+ * @returns The user object or undefined if not found.
+ */
+export const findUserById = (id: string): User | undefined => {
+    return users.get(id);
+};
 
 /**
  * Finds a user by their username.
@@ -21,12 +27,7 @@ const users: Map<string, User> = new Map();
  * @returns The user object or undefined if not found.
  */
 export const findUserByUsername = (username: string): User | undefined => {
-    for (const user of users.values()) {
-        if (user.username === username) {
-            return user;
-        }
-    }
-    return undefined;
+    return [...users.values()].find(user => user.username === username);
 };
 
 /**
@@ -35,12 +36,12 @@ export const findUserByUsername = (username: string): User | undefined => {
  * @returns The created user object.
  */
 export const createUser = (username: string): User => {
-    const id = crypto.randomBytes(32);
+    const id = crypto.randomBytes(16).toString("hex");
     const user: User = {
         id,
         username,
         credentials: [],
     };
-    users.set(Buffer.from(id).toString("base64url"), user);
+    users.set(id, user);
     return user;
 };
