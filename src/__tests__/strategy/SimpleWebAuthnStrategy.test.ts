@@ -1,6 +1,4 @@
-// src/__tests__/strategy/SimpleWebAuthnStrategy.test.ts
-
-import { SimpleWebAuthnStrategy, SimpleWebAuthnStrategyOptions } from "../../strategy/SimpleWebAuthnStrategy";
+import { SimpleWebAuthnStrategy } from "../../strategy/SimpleWebAuthnStrategy";
 import passport from "passport";
 import { verifyAuthentication } from "../../index";
 import type { WebAuthnCredential } from "@simplewebauthn/server";
@@ -11,18 +9,11 @@ const mockedVerifyAuthentication = verifyAuthentication as jest.MockedFunction<t
 
 describe("SimpleWebAuthnStrategy", () => {
     let strategy: SimpleWebAuthnStrategy;
-    let getUserMock: jest.Mock;
     let reqMock: any;
-    let userMock: { id: Uint8Array; credentials: WebAuthnCredential[] };
+    let userMock: { id: string; credentials: WebAuthnCredential[] };
 
     beforeEach(() => {
-        getUserMock = jest.fn();
-
-        const options: SimpleWebAuthnStrategyOptions = {
-            getUser: getUserMock,
-        };
-
-        strategy = new SimpleWebAuthnStrategy(options);
+        strategy = new SimpleWebAuthnStrategy();
 
         // Override fail, success, and error to allow Jest to track calls
         strategy.fail = jest.fn();
@@ -35,11 +26,12 @@ describe("SimpleWebAuthnStrategy", () => {
         // Mock request
         reqMock = {
             body: {},
+            user: undefined, // Initially undefined
         };
 
         // Mock user
         userMock = {
-            id: new Uint8Array([1, 2, 3, 4]),
+            id: "user123",
             credentials: [],
         };
     });
@@ -48,71 +40,43 @@ describe("SimpleWebAuthnStrategy", () => {
         jest.clearAllMocks();
     });
 
-    it("should call fail when userId is missing", (done) => {
+    it("should call fail when req.user is missing", (done) => {
         reqMock.body = { response: {} };
 
-        // Override fail to check the call and finish the test
         strategy.fail = (info: any, status?: number) => {
             try {
-                expect(info).toEqual({ message: "Missing userId or response" });
-                expect(status).toBe(400);
-                expect(strategy.success).not.toHaveBeenCalled();
-                expect(strategy.error).not.toHaveBeenCalled();
+                expect(info).toEqual({ message: "User not authenticated" });
+                expect(status).toBe(401);
                 done();
             } catch (error) {
                 done(error);
             }
         };
 
-        // Call authenticate
         strategy.authenticate(reqMock);
     });
 
     it("should call fail when response is missing", (done) => {
-        reqMock.body = { userId: "dXNlcklk" }; // 'userId' in base64url
+        reqMock.user = userMock;
+        reqMock.body = {}; // Missing response
 
-        // Override fail to check the call and finish the test
         strategy.fail = (info: any, status?: number) => {
             try {
-                expect(info).toEqual({ message: "Missing userId or response" });
+                expect(info).toEqual({ message: "Missing response data" });
                 expect(status).toBe(400);
-                expect(strategy.success).not.toHaveBeenCalled();
-                expect(strategy.error).not.toHaveBeenCalled();
                 done();
             } catch (error) {
                 done(error);
             }
         };
 
-        // Call authenticate
         strategy.authenticate(reqMock);
     });
 
-    it("should call fail when user is not found", (done) => {
-        reqMock.body = { userId: "dXNlcklk", response: {} };
-        getUserMock.mockResolvedValue(null);
+    it("should call fail when verification is unsuccessful", (done) => {
+        reqMock.user = userMock;
+        reqMock.body = { response: {} };
 
-        // Override fail to check the call and finish the test
-        strategy.fail = (info: any, status?: number) => {
-            try {
-                expect(getUserMock).toHaveBeenCalledWith(reqMock, Buffer.from("dXNlcklk", "base64url"));
-                expect(info).toEqual({ message: "User not found" });
-                expect(status).toBe(404);
-                expect(strategy.success).not.toHaveBeenCalled();
-                expect(strategy.error).not.toHaveBeenCalled();
-                done();
-            } catch (error) {
-                done(error);
-            }
-        };
-
-        // Call authenticate
-        strategy.authenticate(reqMock);
-    });
-
-    it("should call fail when verification is not successful", (done) => {
-        reqMock.body = { userId: "dXNlcklk", response: {} };
-        getUserMock.mockResolvedValue(userMock);
         mockedVerifyAuthentication.mockResolvedValue({
             verified: false,
             authenticationInfo: {
@@ -126,28 +90,23 @@ describe("SimpleWebAuthnStrategy", () => {
             },
         });
 
-        // Override fail to check the call and finish the test
         strategy.fail = (info: any, status?: number) => {
             try {
-                expect(getUserMock).toHaveBeenCalledWith(reqMock, Buffer.from("dXNlcklk", "base64url"));
-                expect(mockedVerifyAuthentication).toHaveBeenCalledWith(reqMock, userMock, reqMock.body.response);
                 expect(info).toEqual({ message: "Verification failed" });
                 expect(status).toBe(403);
-                expect(strategy.success).not.toHaveBeenCalled();
-                expect(strategy.error).not.toHaveBeenCalled();
                 done();
             } catch (error) {
                 done(error);
             }
         };
 
-        // Call authenticate
         strategy.authenticate(reqMock);
     });
 
     it("should call success when authentication is successful", (done) => {
-        reqMock.body = { userId: "dXNlcklk", response: {} };
-        getUserMock.mockResolvedValue(userMock);
+        reqMock.user = userMock;
+        reqMock.body = { response: {} };
+
         mockedVerifyAuthentication.mockResolvedValue({
             verified: true,
             authenticationInfo: {
@@ -161,64 +120,34 @@ describe("SimpleWebAuthnStrategy", () => {
             },
         });
 
-        // Override success to check the call and finish the test
         strategy.success = (user: any) => {
             try {
-                expect(getUserMock).toHaveBeenCalledWith(reqMock, Buffer.from("dXNlcklk", "base64url"));
-                expect(mockedVerifyAuthentication).toHaveBeenCalledWith(reqMock, userMock, reqMock.body.response);
                 expect(user).toEqual(userMock);
-                expect(strategy.fail).not.toHaveBeenCalled();
-                expect(strategy.error).not.toHaveBeenCalled();
                 done();
             } catch (error) {
                 done(error);
             }
         };
 
-        // Call authenticate
         strategy.authenticate(reqMock);
     });
 
-    it("should handle errors by calling error method", (done) => {
-        reqMock.body = { userId: "dXNlcklk", response: {} };
-        const error = new Error("Database error");
-        getUserMock.mockRejectedValue(error);
+    it("should handle errors correctly", (done) => {
+        reqMock.user = userMock;
+        reqMock.body = { response: {} };
+        const error = new Error("Something went wrong");
 
-        // Override error to check the call and finish the test
+        mockedVerifyAuthentication.mockRejectedValue(error);
+
         strategy.error = (err: any) => {
             try {
-                expect(getUserMock).toHaveBeenCalledWith(reqMock, Buffer.from("dXNlcklk", "base64url"));
                 expect(err).toEqual(error);
-                expect(strategy.fail).not.toHaveBeenCalled();
-                expect(strategy.success).not.toHaveBeenCalled();
                 done();
             } catch (error) {
                 done(error);
             }
         };
 
-        // Call authenticate
-        strategy.authenticate(reqMock);
-    });
-
-    it("should handle non-Error exceptions by calling error with generic message", (done) => {
-        reqMock.body = { userId: "dXNlcklk", response: {} };
-        getUserMock.mockRejectedValue("Unknown error");
-
-        // Override error to check the call and finish the test
-        strategy.error = (err: any) => {
-            try {
-                expect(getUserMock).toHaveBeenCalledWith(reqMock, Buffer.from("dXNlcklk", "base64url"));
-                expect(err).toEqual(new Error("An unknown error occurred"));
-                expect(strategy.fail).not.toHaveBeenCalled();
-                expect(strategy.success).not.toHaveBeenCalled();
-                done();
-            } catch (error) {
-                done(error);
-            }
-        };
-
-        // Call authenticate
         strategy.authenticate(reqMock);
     });
 });

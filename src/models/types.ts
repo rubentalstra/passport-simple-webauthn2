@@ -5,21 +5,6 @@ import type {
 } from "@simplewebauthn/server";
 
 /**
- * Represents a user in the application.
- */
-export type UserModel = {
-  /**
-   * Unique identifier for the user.
-   */
-  id: Uint8Array;
-
-  /**
-   * Username of the user.
-   */
-  username: string;
-};
-
-/**
  * Represents a WebAuthn passkey associated with a user.
  */
 export type Passkey = {
@@ -32,11 +17,6 @@ export type Passkey = {
    * Public key as a Uint8Array.
    */
   publicKey: Uint8Array;
-
-  /**
-   * Foreign key relation to the user.
-   */
-  user: UserModel;
 
   /**
    * WebAuthn user ID associated with this passkey.

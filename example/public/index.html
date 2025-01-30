@@ -1,4 +1,3 @@
-<!-- src/public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -53,17 +52,19 @@
         // Convert ID and challenge from Base64URL to ArrayBuffer
         options.user.id = await base64urlToBuffer(options.user.id);
         options.challenge = await base64urlToBuffer(options.challenge);
-        options.excludeCredentials = options.excludeCredentials.map(async (cred) => ({
-            ...cred,
-            id: await base64urlToBuffer(cred.id),
-        }));
+        options.excludeCredentials = await Promise.all(
+            options.excludeCredentials.map(async (cred) => ({
+                ...cred,
+                id: await base64urlToBuffer(cred.id),
+            }))
+        );
 
         try {
             const credential = await navigator.credentials.create({ publicKey: options });
             const attestationResponse = {
                 username,
                 response: {
-                    id: credential.id,
+                    id: await bufferToBase64url(credential.rawId),
                     type: credential.type,
                     response: {
                         authenticatorData: await bufferToBase64url(credential.response.authenticatorData),
@@ -110,16 +111,18 @@
 
         // Convert challenge and allowCredentials IDs from Base64URL to ArrayBuffer
         options.challenge = await base64urlToBuffer(options.challenge);
-        options.allowCredentials = options.allowCredentials.map((cred) => ({
-            ...cred,
-            id: await base64urlToBuffer(cred.id),
-        }));
+        options.allowCredentials = await Promise.all(
+            options.allowCredentials.map(async (cred) => ({
+                ...cred,
+                id: await base64urlToBuffer(cred.id),
+            }))
+        );
 
         try {
             const assertion = await navigator.credentials.get({ publicKey: options });
 
             const assertionResponse = {
-                id: assertion.id,
+                id: await bufferToBase64url(assertion.rawId),
                 type: assertion.type,
                 response: {
                     authenticatorData: await bufferToBase64url(assertion.response.authenticatorData),

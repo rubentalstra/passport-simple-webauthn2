@@ -1,26 +1,28 @@
-// src/strategy/index.ts
 import passport from "passport";
 import { SimpleWebAuthnStrategy } from "passport-simple-webauthn2";
 import { Request } from "express";
-import { findUserById } from "../models/user";
+import { findUserById } from "../../../src/services/userService";
 
 passport.serializeUser((user: any, done) => {
-    done(null, Buffer.from(user.id).toString("base64url"));
+    done(null, user.id);
 });
 
-passport.deserializeUser((id: string, done) => {
-    const user = findUserById(Buffer.from(id, "base64url"));
-    if (user) {
-        done(null, user);
-    } else {
-        done(new Error("User not found"), null);
+passport.deserializeUser(async (id: string, done) => {
+    try {
+        const user = await findUserById(id);
+        if (user) {
+            done(null, user);
+        } else {
+            done(new Error("User not found"), null);
+        }
+    } catch (error) {
+        done(error, null);
     }
 });
 
 const strategy = new SimpleWebAuthnStrategy({
-    getUser: async (req: Request, id: Uint8Array) => {
-        const user = findUserById(id);
-        return user || null;
+    getUser: async (req: Request, id: string) => {
+        return await findUserById(id);
     },
 });
 

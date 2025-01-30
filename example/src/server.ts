@@ -1,7 +1,6 @@
-// src/server.ts
 import express from "express";
 import session from "express-session";
-import passport from "./strategy";
+import passport from "passport";
 import routes from "./routes";
 import dotenv from "dotenv";
 import path from "path";
@@ -21,14 +20,14 @@ app.use(
     })
 );
 
-// Initialize Passport and restore authentication state, if any, from the session.
+// Initialize Passport and restore authentication state
 app.use(passport.initialize());
 app.use(passport.session());
 
 app.use("/", routes);
 
 // Serve static files (for frontend)
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "../public")));
 
 const PORT = process.env.PORT || 3000;
 

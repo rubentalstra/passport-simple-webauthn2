@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import type {
-  VerifiedRegistrationResponse,
   PublicKeyCredentialCreationOptionsJSON,
+  VerifiedRegistrationResponse,
   RegistrationResponseJSON,
   WebAuthnCredential,
 } from "@simplewebauthn/server";
@@ -12,78 +12,55 @@ import {
 import { saveChallenge, getChallenge, clearChallenge } from "./challengeStore";
 
 /**
- * Represents a user during the registration process.
- */
-export interface RegistrationUser {
-  /**
-   * Unique identifier for the user.
-   */
-  id: Uint8Array;
-
-  /**
-   * Username of the user.
-   */
-  name: string;
-
-  /**
-   * Display name of the user.
-   */
-  displayName: string;
-
-  /**
-   * Array of existing WebAuthn credentials associated with the user.
-   */
-  credentials: WebAuthnCredential[];
-}
-
-/**
  * Generates registration options for a new WebAuthn credential.
  * @param req - The Express request object.
- * @param user - The user registering a new credential.
  * @returns A promise that resolves to the registration options JSON.
- * @throws Will throw an error if userId or challenge is invalid.
  */
 export const generateRegistration = async (
   req: Request,
-  user: RegistrationUser,
 ): Promise<PublicKeyCredentialCreationOptionsJSON> => {
+  if (!req.user) throw new Error("User not authenticated");
+
+  const user = req.user as {
+    id: string;
+    name: string;
+    displayName: string;
+    credentials: WebAuthnCredential[];
+  };
+
   const options = await generateRegistrationOptions({
     rpName: process.env.RP_NAME || "Example RP",
     rpID: process.env.RP_ID || "example.com",
-    userID: user.id,
+    userID: Buffer.from(user.id),
     userName: user.name,
+    userDisplayName: user.displayName || user.name,
     attestationType: "direct",
     authenticatorSelection: {
       residentKey: "preferred",
       userVerification: "preferred",
     },
     supportedAlgorithmIDs: [-8, -7, -257],
+    preferredAuthenticatorType: "securityKey",
   });
 
-  await saveChallenge(
-    req,
-    Buffer.from(user.id).toString("base64url"),
-    options.challenge,
-  );
-
+  await saveChallenge(req, user.id, options.challenge);
   return options;
 };
 
 /**
  * Verifies the registration response from the client.
  * @param req - The Express request object.
- * @param user - The user registering a new credential.
  * @param response - The registration response JSON from the client.
  * @returns A promise that resolves to the verified registration response.
- * @throws Will throw an error if the challenge is missing or verification fails.
  */
 export const verifyRegistration = async (
   req: Request,
-  user: RegistrationUser,
   response: RegistrationResponseJSON,
 ): Promise<VerifiedRegistrationResponse> => {
-  const userIdBase64 = Buffer.from(user.id).toString("base64url");
-  const storedChallenge = await getChallenge(req, userIdBase64);
+  if (!req.user) throw new Error("User not authenticated");
+
+  const user = req.user as { id: string };
+  const storedChallenge = await getChallenge(req, user.id);
   if (!storedChallenge) throw new Error("Challenge expired or missing");
 
   const verification = await verifyRegistrationResponse({
@@ -96,6 +73,6 @@ export const verifyRegistration = async (
   if (!verification.verified)
     throw new Error("Registration verification failed");
 
-  await clearChallenge(req, userIdBase64);
+  await clearChallenge(req, user.id);
   return verification;
 };

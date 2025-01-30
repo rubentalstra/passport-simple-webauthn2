@@ -9,9 +9,7 @@ import {
     VerifiedAuthenticationResponse,
 } from "@simplewebauthn/server";
 import { saveChallenge, getChallenge, clearChallenge } from "../../strategy/challengeStore";
-import type { AuthUser } from "../../strategy/authentication";
 import type { Request } from "express";
-import { Session, SessionData } from "express-session";
 
 // Mocked functions
 const mockedGenerateAuthenticationOptions = generateAuthenticationOptions as jest.MockedFunction<typeof generateAuthenticationOptions>;
@@ -22,34 +20,24 @@ const mockedClearChallenge = clearChallenge as jest.MockedFunction<typeof clearC
 
 describe("Authentication Utility Functions", () => {
     let reqMock: Partial<Request>;
-    let authUserMock: AuthUser;
+    let userMock: { id: string; credentials: any[] };
 
     beforeEach(() => {
         reqMock = {
-            session: {
-                userId: Buffer.from([1, 2, 3, 4]).toString("base64url"),
-                id: "mock-session-id",
-                cookie: { path: "/", httpOnly: true, originalMaxAge: null },
-                regenerate: jest.fn(),
-                destroy: jest.fn(),
-                reload: jest.fn(),
-                resetMaxAge: jest.fn(),
-                save: jest.fn(),
-                touch: jest.fn(),
-            } as unknown as Session & Partial<SessionData>,
-        };
+            user: {
+                id: "user123",
+                credentials: [
+                    {
+                        id: "test-id",
+                        publicKey: new Uint8Array([1, 2, 3, 4]),
+                        counter: 0,
+                        transports: ["usb"],
+                    },
+                ],
+            },
+        } as Partial<Request>;
 
-        authUserMock = {
-            id: new Uint8Array([1, 2, 3, 4]),
-            credentials: [
-                {
-                    id: "test-id", // Ensure this matches response.id
-                    publicKey: new Uint8Array([1, 2, 3, 4]),
-                    counter: 0,
-                    transports: ["usb"],
-                },
-            ],
-        };
+        userMock = reqMock.user as { id: string; credentials: any[] };
     });
 
     afterEach(() => {
@@ -69,23 +57,36 @@ describe("Authentication Utility Functions", () => {
 
             expect(mockedGenerateAuthenticationOptions).toHaveBeenCalledWith({
                 rpID: "example.com",
+                allowCredentials: [
+                    {
+                        id: userMock.credentials[0].id,
+                        transports: userMock.credentials[0].transports || [],
+                    },
+                ],
+                timeout: 60000,
+                userVerification: "preferred",
             });
-
-            const expectedUserId = Buffer.from(reqMock.session!.userId || "", "utf8").toString("base64");
-
 
             expect(mockedSaveChallenge).toHaveBeenCalledWith(
                 reqMock,
-                expectedUserId, // Buffer is passed directly
+                userMock.id,
                 "random-challenge"
             );
+        });
+
+        it("should throw an error if req.user is missing", async () => {
+            reqMock.user = undefined;
+
+            await expect(generateAuthentication(reqMock as Request)).rejects.toThrow("User not authenticated");
+            expect(mockedGenerateAuthenticationOptions).not.toHaveBeenCalled();
+            expect(mockedSaveChallenge).not.toHaveBeenCalled();
         });
     });
 
     describe("verifyAuthentication", () => {
         it("should verify authentication and clear challenge on success", async () => {
             const response: AuthenticationResponseJSON = {
-                id: "test-id", // Matches `authUserMock.credentials`
+                id: "test-id", // Matches `userMock.credentials`
                 rawId: "test-raw-id",
                 type: "public-key",
                 response: {
@@ -114,25 +115,25 @@ describe("Authentication Utility Functions", () => {
             mockedVerifyAuthenticationResponse.mockResolvedValueOnce(verification);
             mockedClearChallenge.mockResolvedValueOnce();
 
-            const result = await verifyAuthentication(reqMock as Request, authUserMock, response);
+            const result = await verifyAuthentication(reqMock as Request, response);
 
-            expect(mockedGetChallenge).toHaveBeenCalledWith(reqMock, reqMock.session!.userId);
+            expect(mockedGetChallenge).toHaveBeenCalledWith(reqMock, userMock.id);
             expect(mockedVerifyAuthenticationResponse).toHaveBeenCalledWith({
                 response,
                 expectedChallenge: "stored-challenge",
                 expectedOrigin: "https://example.com",
                 expectedRPID: "example.com",
-                credential: authUserMock.credentials[0], // Ensure credential is passed
+                credential: userMock.credentials[0], // Ensure correct credential is passed
                 requireUserVerification: true,
             });
 
-            expect(mockedClearChallenge).toHaveBeenCalledWith(reqMock, reqMock.session!.userId);
+            expect(mockedClearChallenge).toHaveBeenCalledWith(reqMock, userMock.id);
             expect(result).toBe(verification);
         });
 
         it("should throw an error if credential is not found", async () => {
             const response: AuthenticationResponseJSON = {
-                id: "nonexistent-credential-id", // Does NOT match authUserMock.credentials
+                id: "nonexistent-credential-id", // Does NOT match userMock.credentials
                 rawId: "nonexistent-raw-id",
                 type: "public-key",
                 response: {
@@ -145,9 +146,21 @@ describe("Authentication Utility Functions", () => {
 
             mockedGetChallenge.mockResolvedValueOnce("stored-challenge");
 
-            await expect(verifyAuthentication(reqMock as Request, authUserMock, response)).rejects.toThrow("Credential not found");
+            await expect(verifyAuthentication(reqMock as Request, response)).rejects.toThrow("Credential not found");
 
-            expect(mockedGetChallenge).toHaveBeenCalledWith(reqMock, reqMock.session!.userId);
+            expect(mockedGetChallenge).toHaveBeenCalledWith(reqMock, userMock.id);
+            expect(mockedVerifyAuthenticationResponse).not.toHaveBeenCalled();
+            expect(mockedClearChallenge).not.toHaveBeenCalled();
+        });
+
+        it("should throw an error if req.user is missing", async () => {
+            reqMock.user = undefined;
+
+            await expect(verifyAuthentication(reqMock as Request, {} as AuthenticationResponseJSON)).rejects.toThrow(
+                "User not authenticated"
+            );
+
+            expect(mockedGetChallenge).not.toHaveBeenCalled();
             expect(mockedVerifyAuthenticationResponse).not.toHaveBeenCalled();
             expect(mockedClearChallenge).not.toHaveBeenCalled();
         });
