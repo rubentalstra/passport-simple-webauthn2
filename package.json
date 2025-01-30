@@ -1,5 +1,5 @@
 {
-  "name": "@rubentalstra/passport-simple-webauthn2",
+  "name": "passport-simple-webauthn2",
   "version": "1.0.1",
   "description": "Passport strategy for authenticating with Web Authentication (WebAuthn) using FIDO2 Passkeys.",
   "main": "./dist/index.js",
@@ -9,7 +9,7 @@
     "dist"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "tsc",
