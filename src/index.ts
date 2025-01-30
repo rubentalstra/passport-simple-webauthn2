@@ -22,3 +22,5 @@ export {
   resetChallengeStore,
 } from "./strategy/challengeStore";
 export type { UserModel, Passkey } from "./models/types";
+export type { AuthUser } from "./strategy/authentication";
+export type { RegistrationUser } from "./strategy/registration";

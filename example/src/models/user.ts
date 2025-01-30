@@ -1,5 +1,6 @@
 // src/models/user.ts
-import { Passkey, UserModel } from "";
+import { Passkey, UserModel } from "passport-simple-webauthn2";
+import * as crypto from "node:crypto";
 
 export interface User extends UserModel {
     credentials: Passkey[];

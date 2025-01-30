@@ -1,0 +1,96 @@
+<!-- src/public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SimpleWebAuthn Example</title>
+</head>
+<body>
+<h1>SimpleWebAuthn Example</h1>
+
+<h2>Register</h2>
+<input type="text" id="register-username" placeholder="Username">
+<button id="register-button">Register</button>
+
+<h2>Login</h2>
+<input type="text" id="login-username" placeholder="Username">
+<button id="login-button">Login</button>
+
+<script>
+    async function register() {
+        const username = document.getElementById('register-username').value;
+        const response = await fetch('/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username }),
+        });
+        const options = await response.json();
+
+        options.user.id = Uint8Array.from(atob(options.user.id), c => c.charCodeAt(0));
+
+        const credential = await navigator.credentials.create({ publicKey: options });
+
+        const verificationResponse = {
+            username,
+            response: credential,
+        };
+
+        const verifyResponse = await fetch('/auth/register/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(verificationResponse),
+        });
+
+        const verifyResult = await verifyResponse.json();
+        if (verifyResult.verified) {
+            alert('Registration successful!');
+        } else {
+            alert('Registration failed.');
+        }
+    }
+
+    async function login() {
+        const username = document.getElementById('login-username').value;
+        const response = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const options = await response.json();
+
+        options.challenge = Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0));
+        options.allowCredentials = options.allowCredentials.map(cred => ({
+            ...cred,
+            id: Uint8Array.from(atob(cred.id), c => c.charCodeAt(0)),
+        }));
+
+        const assertion = await navigator.credentials.get({ publicKey: options });
+
+        const verificationResponse = {
+            id: assertion.id,
+            type: assertion.type,
+            response: {
+                authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
+                clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
+                signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature))),
+                userHandle: assertion.response.userHandle ? btoa(String.fromCharCode(...new Uint8Array(assertion.response.userHandle))) : null,
+            },
+        };
+
+        const verifyResponse = await fetch('/auth/login/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(verificationResponse),
+        });
+
+        if (verifyResponse.ok) {
+            alert('Authentication successful!');
+        } else {
+            alert('Authentication failed.');
+        }
+    }
+
+    document.getElementById('register-button').addEventListener('click', register);
+    document.getElementById('login-button').addEventListener('click', login);
+</script>
+</body>
+</html>
