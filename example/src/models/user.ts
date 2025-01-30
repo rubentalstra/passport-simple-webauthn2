@@ -12,6 +12,10 @@ export interface User {
 
 const users: Map<string, User> = new Map();
 
+export async function getAllUsers() {
+    return Array.from(users.values());
+}
+
 /**
  * Finds a user by their ID.
  */
@@ -35,3 +39,12 @@ export const createUser = (username: string): User => {
     users.set(id, user);
     return user;
 };
+
+
+export async function updateUser(id: string, data: Partial<any>) {
+    const user = users.get(id);
+    if (user) {
+        Object.assign(user, data);
+        users.set(id, user);
+    }
+}

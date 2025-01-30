@@ -1,12 +1,11 @@
 import express, { Request, Response } from "express";
 import passport from "passport";
 import {
-    generateAuthentication,
-    generateRegistration,
+    generateRegistration, UserModel,
     verifyRegistration,
-    Passkey,
 } from "passport-simple-webauthn2";
-import { findUserByUsername, createUser } from "../models/user";
+import {findUserByUsername, createUser, findUserById} from "../models/user";
+import {generateAuthenticationOptions} from "@simplewebauthn/server";
 
 const router = express.Router();
 
@@ -14,6 +13,7 @@ const router = express.Router();
  * **[1] User Signup**
  * - Creates a new user.
  */
+// @ts-ignore
 router.post("/signup", (req: Request, res: Response) => {
     const { username } = req.body;
     if (!username) return res.status(400).json({ error: "Username is required" });
@@ -32,11 +32,12 @@ router.post("/signup", (req: Request, res: Response) => {
  * **[2] Registration Initiation**
  * - Uses `req.user` to register the authenticated user.
  */
+// @ts-ignore
 router.post("/register", async (req: Request, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "User not authenticated" });
 
     try {
-        const registrationOptions = await generateRegistration(req.user);
+        const registrationOptions = await generateRegistration(<UserModel>req.user);
         res.json(registrationOptions);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -46,6 +47,7 @@ router.post("/register", async (req: Request, res: Response) => {
 /**
  * **[3] Registration Verification**
  */
+// @ts-ignore
 router.post("/register/verify", async (req: Request, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "User not authenticated" });
 
@@ -66,22 +68,23 @@ router.post("/register/verify", async (req: Request, res: Response) => {
 /**
  * **[4] Authentication Initiation**
  */
-router.post("/login", async (req: Request, res: Response) => {
-    const { username } = req.body;
-    const user = findUserByUsername(username);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    req.login(user, async (err) => {
-        if (err) return res.status(500).json({ error: "Login failed" });
-
-        try {
-            const authOptions = await generateAuthentication(user);
-            res.json(authOptions);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
-    });
-});
+// @ts-ignore
+// router.post("/login", async (req: Request, res: Response) => {
+//     const { username } = req.body;
+//     const user = findUserByUsername(username);
+//     if (!user) return res.status(404).json({ error: "User not found" });
+//
+//     req.login(user, async (err) => {
+//         if (err) return res.status(500).json({ error: "Login failed" });
+//
+//         try {
+//             const authOptions = await generateAuthenticationOptions(user.credentials);
+//             res.json(authOptions);
+//         } catch (error: any) {
+//             res.status(500).json({ error: error.message });
+//         }
+//     });
+// });
 
 /**
  * **[5] Authentication Verification**

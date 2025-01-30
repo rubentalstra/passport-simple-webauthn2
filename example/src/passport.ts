@@ -1,6 +1,6 @@
 import passport from "passport";
 import { SimpleWebAuthnStrategy } from "passport-simple-webauthn2";
-import { findUserById } from "./models/user";
+import {findUserById, getAllUsers, updateUser} from "./models/user"; // Ensure updateUser is implemented
 
 // Serialize user for session storage
 passport.serializeUser((user: any, done) => {
@@ -9,31 +9,58 @@ passport.serializeUser((user: any, done) => {
 
 // Deserialize user from session
 passport.deserializeUser(async (id: string, done) => {
-    const user = await findUserById(id);
-    done(null, user || null);
+    try {
+        const user = await findUserById(id);
+        done(null, user || null);
+    } catch (error) {
+        done(error, null);
+    }
 });
 
 const webAuthnStrategy = new SimpleWebAuthnStrategy({
     findPasskeyByCredentialID: async (credentialID) => {
-        const user = [...users.values()].find(u =>
-            u.credentials.some(c => c.id === credentialID)
-        );
-        return user ? user.credentials.find(c => c.id === credentialID) : null;
+        try {
+            const users = await getAllUsers(); // Ensure this function fetches all users
+            for (const user of users) {
+                const passkey = user.credentials.find((c: { id: string }) => c.id === credentialID);
+                if (passkey) return passkey;
+            }
+            return null;
+        } catch (error) {
+            console.error("Error finding passkey by credential ID:", error);
+            return null;
+        }
     },
     updatePasskeyCounter: async (credentialID, newCounter) => {
-        const user = [...users.values()].find(u =>
-            u.credentials.some(c => c.id === credentialID)
-        );
-        if (user) {
-            const passkey = user.credentials.find(c => c.id === credentialID);
-            if (passkey) passkey.counter = newCounter;
+        try {
+            const users = await getAllUsers();
+            for (const user of users) {
+                const passkey = user.credentials.find((c: { id: string }) => c.id === credentialID);
+                if (passkey) {
+                    passkey.counter = newCounter;
+                    await updateUser(user.id, { credentials: user.credentials }); // Persist changes
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error("Error updating passkey counter:", error);
         }
     },
     findUserByWebAuthnID: async (webauthnUserID) => {
-        return [...users.values()].find(user => user.id === webauthnUserID) || null;
+        try {
+            return await findUserById(webauthnUserID) || null;
+        } catch (error) {
+            console.error("Error finding user by WebAuthn ID:", error);
+            return null;
+        }
     },
     registerPasskey: async (user, passkey) => {
-        user.credentials.push(passkey);
+        try {
+            user.credentials.push(passkey);
+            await updateUser(user.id, { credentials: user.credentials }); // Persist passkey
+        } catch (error) {
+            console.error("Error registering passkey:", error);
+        }
     }
 });
 

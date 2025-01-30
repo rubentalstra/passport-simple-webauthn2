@@ -10,6 +10,7 @@ import type {
 export type UserModel = {
   id: any;
   username: string;
+  credentials: Passkey[];
 };
 
 /**
