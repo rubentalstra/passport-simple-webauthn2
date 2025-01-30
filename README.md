@@ -2,7 +2,7 @@
 
 ![Version](https://img.shields.io/npm/v/passport-simple-webauthn2)
 ![License](https://img.shields.io/npm/l/passport-simple-webauthn2)
-![Build](https://img.shields.io/github/actions/workflow/status/rubentalstra/passport-simple-webauthn/main.yml?branch=main)
+![Build](https://img.shields.io/github/actions/workflow/status/rubentalstra/passport-simple-webauthn2/publish.yml?branch=main)
 ![Downloads](https://img.shields.io/npm/dt/passport-simple-webauthn2)
 
 **Passport strategy for authenticating with Web Authentication (WebAuthn) using FIDO2 Passkeys.**
