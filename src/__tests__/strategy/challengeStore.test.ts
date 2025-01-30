@@ -1,5 +1,4 @@
-
-import { saveChallenge, getChallenge, clearChallenge } from "../../index";
+import { saveChallenge, getChallenge, clearChallenge } from "passport-simple-webauthn2";
 import type { Request } from "express";
 
 describe("Challenge Store Functions", () => {

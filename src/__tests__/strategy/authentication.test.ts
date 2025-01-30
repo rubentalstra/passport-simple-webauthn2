@@ -1,11 +1,20 @@
-import { generateAuthentication, verifyAuthentication } from "../../strategy/authentication";
-import { generateAuthenticationOptions, verifyAuthenticationResponse } from "@simplewebauthn/server";
-import { saveChallenge, getChallenge, clearChallenge } from "../../strategy/challengeStore";
-import type { AuthUser, VerifiedAuthenticationResponse } from "passport-simple-webauthn2";
-import type { Request } from "express";
+// src/__tests__/strategy/authentication.test.ts
 
-jest.mock("@simplewebauthn/server");
 jest.mock("../../strategy/challengeStore");
+jest.mock("@simplewebauthn/server");
+
+import { generateAuthentication, verifyAuthentication } from "passport-simple-webauthn2";
+import {
+    AuthenticationResponseJSON,
+    generateAuthenticationOptions,
+    verifyAuthenticationResponse,
+    VerifiedAuthenticationResponse,
+} from "@simplewebauthn/server";
+import { saveChallenge, getChallenge, clearChallenge } from "../../strategy/challengeStore";
+import type { AuthUser } from "../../strategy/authentication";
+import type { Request } from "express";
+import {Session, SessionData} from "express-session";
+
 
 const mockedGenerateAuthenticationOptions = generateAuthenticationOptions as jest.MockedFunction<typeof generateAuthenticationOptions>;
 const mockedVerifyAuthenticationResponse = verifyAuthenticationResponse as jest.MockedFunction<typeof verifyAuthenticationResponse>;
@@ -20,7 +29,19 @@ describe("Authentication Utility Functions", () => {
     beforeEach(() => {
         reqMock = {
             session: {
-                userId: new Uint8Array([1, 2, 3, 4]).toString(), // Simulate base64url-encoded userId
+                userId: Buffer.from(new Uint8Array([1, 2, 3, 4])).toString("base64url"),
+                id: "mock-session-id",
+                cookie: {
+                    path: "/",
+                    httpOnly: true,
+                    originalMaxAge: null
+                },
+                regenerate: jest.fn(),
+                destroy: jest.fn(),
+                reload: jest.fn(),
+                resetMaxAge: jest.fn(),
+                save: jest.fn(),
+                touch: jest.fn(),
             },
         };
         authUserMock = {
@@ -50,13 +71,13 @@ describe("Authentication Utility Functions", () => {
 
             expect(mockedSaveChallenge).toHaveBeenCalledWith(
                 reqMock,
-                Buffer.from(reqMock.session!.userId!, "base64url").toString("base64url"),
+                Buffer.from(authUserMock.id).toString("base64url"),
                 challenge
             );
         });
 
         it("should throw an error if user is not authenticated", async () => {
-            reqMock.session = {}; // No userId
+            reqMock.session = {} as Session & Partial<SessionData>;
 
             await expect(generateAuthentication(reqMock as Request)).rejects.toThrow("User not authenticated");
             expect(mockedGenerateAuthenticationOptions).not.toHaveBeenCalled();
@@ -66,8 +87,31 @@ describe("Authentication Utility Functions", () => {
 
     describe("verifyAuthentication", () => {
         it("should verify authentication and clear challenge on success", async () => {
-            const response = { /* mock AuthenticationResponseJSON */ };
-            const verification: VerifiedAuthenticationResponse = { verified: true };
+            const response: AuthenticationResponseJSON = {
+                id: "test-id",
+                rawId: "test-raw-id",
+                type: "public-key",
+                response: {
+                    authenticatorData: "test-authenticator-data",
+                    clientDataJSON: "test-client-data-json",
+                    signature: "test-signature",
+                    // 'userHandle' is optional; omit or provide a valid string
+                },
+                clientExtensionResults: {},
+            };
+            const verification: VerifiedAuthenticationResponse = {
+                verified: true,
+                authenticationInfo: {
+                    credentialID: "test-credential-id",
+                    newCounter: 0,
+                    userVerified: true,
+                    credentialDeviceType: "singleDevice",
+                    credentialBackedUp: false,
+                    origin: "https://example.com",
+                    rpID: "example.com",
+                    authenticatorExtensionResults: {},
+                }
+            };
             const userIdBase64 = Buffer.from(authUserMock.id).toString("base64url");
 
             mockedGetChallenge.mockResolvedValueOnce("stored-challenge");
@@ -90,7 +134,18 @@ describe("Authentication Utility Functions", () => {
         });
 
         it("should throw an error if challenge is missing", async () => {
-            const response = { /* mock AuthenticationResponseJSON */ };
+            const response: AuthenticationResponseJSON = {
+                id: "test-id",
+                rawId: "test-raw-id",
+                type: "public-key",
+                response: {
+                    authenticatorData: "test-authenticator-data",
+                    clientDataJSON: "test-client-data-json",
+                    signature: "test-signature",
+                    // 'userHandle' is optional; omit or provide a valid string
+                },
+                clientExtensionResults: {},
+            };
             const userIdBase64 = Buffer.from(authUserMock.id).toString("base64url");
 
             mockedGetChallenge.mockResolvedValueOnce(null);
@@ -103,12 +158,27 @@ describe("Authentication Utility Functions", () => {
         });
 
         it("should throw an error if credential is not found", async () => {
-            const response = { id: "nonexistent-credential-id" };
-            const verification: VerifiedAuthenticationResponse = { verified: true };
+            const response: AuthenticationResponseJSON = {
+                id: "nonexistent-credential-id",
+                rawId: "nonexistent-raw-id",
+                type: "public-key",
+                response: {
+                    authenticatorData: "nonexistent-authenticator-data",
+                    clientDataJSON: "nonexistent-client-data-json",
+                    signature: "nonexistent-signature",
+                    // 'userHandle' is optional; omit or provide a valid string
+                },
+                clientExtensionResults: {},
+            };
             const userIdBase64 = Buffer.from(authUserMock.id).toString("base64url");
 
             authUserMock.credentials = [
-                { id: "existing-credential-id", publicKey: new Uint8Array(), user: { id: "1", username: "testuser" }, webauthnUserID: "user-id", counter: 0, deviceType: "usb", backedUp: false },
+                {
+                    id: "existing-credential-id",
+                    publicKey: new Uint8Array(),
+                    counter: 0,
+                    transports: [],
+                },
             ];
 
             mockedGetChallenge.mockResolvedValueOnce("stored-challenge");
@@ -121,8 +191,31 @@ describe("Authentication Utility Functions", () => {
         });
 
         it("should throw an error if verification fails", async () => {
-            const response = { /* mock AuthenticationResponseJSON */ };
-            const verification: VerifiedAuthenticationResponse = { verified: false };
+            const response: AuthenticationResponseJSON = {
+                id: "test-id",
+                rawId: "test-raw-id",
+                type: "public-key",
+                response: {
+                    authenticatorData: "test-authenticator-data",
+                    clientDataJSON: "test-client-data-json",
+                    signature: "test-signature",
+                    // 'userHandle' is optional; omit or provide a valid string
+                },
+                clientExtensionResults: {},
+            };
+            const verification: VerifiedAuthenticationResponse = {
+                verified: false,
+                authenticationInfo: {
+                    credentialID: "test-credential-id",
+                    newCounter: 0,
+                    userVerified: false,
+                    credentialDeviceType: "singleDevice",
+                    credentialBackedUp: false,
+                    origin: "https://example.com",
+                    rpID: "example.com",
+                    authenticatorExtensionResults: {},
+                }
+            };
             const userIdBase64 = Buffer.from(authUserMock.id).toString("base64url");
 
             mockedGetChallenge.mockResolvedValueOnce("stored-challenge");
@@ -143,7 +236,18 @@ describe("Authentication Utility Functions", () => {
         });
 
         it("should throw an error if verifyAuthenticationResponse throws", async () => {
-            const response = { /* mock AuthenticationResponseJSON */ };
+            const response: AuthenticationResponseJSON = {
+                id: "test-id",
+                rawId: "test-raw-id",
+                type: "public-key",
+                response: {
+                    authenticatorData: "test-authenticator-data",
+                    clientDataJSON: "test-client-data-json",
+                    signature: "test-signature",
+                    // 'userHandle' is optional; omit or provide a valid string
+                },
+                clientExtensionResults: {},
+            };
             const userIdBase64 = Buffer.from(authUserMock.id).toString("base64url");
 
             mockedGetChallenge.mockResolvedValueOnce("stored-challenge");

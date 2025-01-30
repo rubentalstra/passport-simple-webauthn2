@@ -53,7 +53,6 @@ export class SimpleWebAuthnStrategy extends PassportStrategy {
    * @param req - Express request object.
    * @param _options - Optional authentication options.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   authenticate(req: Request, _options?: any): void {
     (async (): Promise<void> => {
       try {

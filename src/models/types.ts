@@ -11,7 +11,7 @@ export type UserModel = {
   /**
    * Unique identifier for the user.
    */
-  id: any;
+  id: Uint8Array;
 
   /**
    * Username of the user.

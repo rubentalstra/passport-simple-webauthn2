@@ -8,6 +8,6 @@ declare module "express-session" {
     /**
      * The unique identifier for the authenticated user.
      */
-    userId?: string;
+    userId: string;
   }
 }

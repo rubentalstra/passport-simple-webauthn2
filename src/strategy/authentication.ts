@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import type {
+  PublicKeyCredentialRequestOptionsJSON,
   VerifiedAuthenticationResponse,
   AuthenticationResponseJSON,
   WebAuthnCredential,
@@ -32,7 +33,9 @@ export interface AuthUser {
  * @returns The authentication options.
  * @throws Error if the user is not authenticated or challenge saving fails.
  */
-export const generateAuthentication = async (req: Request) => {
+export const generateAuthentication = async (
+  req: Request,
+): Promise<PublicKeyCredentialRequestOptionsJSON> => {
   if (!req.session.userId) throw new Error("User not authenticated");
 
   const options = await generateAuthenticationOptions({

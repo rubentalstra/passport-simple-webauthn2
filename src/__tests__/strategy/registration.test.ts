@@ -1,11 +1,18 @@
-import { generateRegistration, verifyRegistration } from "../../index";
-import { generateRegistrationOptions, verifyRegistrationResponse } from "@simplewebauthn/server";
-import { saveChallenge, getChallenge, clearChallenge } from "../../index";
-import type { RegistrationUser, VerifiedRegistrationResponse } from "passport-simple-webauthn2";
+// src/__tests__/strategy/registration.test.ts
+jest.mock("../../strategy/challengeStore");
+jest.mock("@simplewebauthn/server");
+
+import { generateRegistration, verifyRegistration } from "passport-simple-webauthn2";
+import {
+    generateRegistrationOptions,
+    RegistrationResponseJSON,
+    verifyRegistrationResponse,
+    VerifiedRegistrationResponse,
+} from "@simplewebauthn/server";
+import { saveChallenge, getChallenge, clearChallenge } from "../../strategy/challengeStore";
+import { RegistrationUser } from "../../strategy/registration";
 import type { Request } from "express";
 
-jest.mock("@simplewebauthn/server");
-jest.mock("../../strategy/challengeStore");
 
 const mockedGenerateRegistrationOptions = generateRegistrationOptions as jest.MockedFunction<typeof generateRegistrationOptions>;
 const mockedVerifyRegistrationResponse = verifyRegistrationResponse as jest.MockedFunction<typeof verifyRegistrationResponse>;
@@ -37,7 +44,7 @@ describe("Registration Utility Functions", () => {
             mockedGenerateRegistrationOptions.mockResolvedValueOnce({
                 challenge,
                 rp: { name: "Example RP", id: "example.com" },
-                user: { id: userMock.id, name: userMock.name, displayName: userMock.displayName },
+                user: { id: userMock.id.toString(), name: userMock.name, displayName: userMock.displayName },
                 pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
                 authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },
                 attestation: "direct",
@@ -68,8 +75,17 @@ describe("Registration Utility Functions", () => {
 
     describe("verifyRegistration", () => {
         it("should verify registration and clear challenge on success", async () => {
-            const response = { /* mock RegistrationResponseJSON */ };
-            const verifiedResponse: VerifiedRegistrationResponse = { verified: true, registrationInfo: {} };
+            const response: RegistrationResponseJSON = {
+                id: "test-id",
+                rawId: "test-raw-id",
+                response: {
+                    attestationObject: "test-attestation-object",
+                    clientDataJSON: "test-client-data-json",
+                },
+                clientExtensionResults: {},
+                type: "public-key",
+            };
+            const verifiedResponse: VerifiedRegistrationResponse = { verified: true };
             const challenge = "stored-challenge";
 
             mockedGetChallenge.mockResolvedValueOnce(challenge);
@@ -90,7 +106,16 @@ describe("Registration Utility Functions", () => {
         });
 
         it("should throw an error if challenge is missing", async () => {
-            const response = { /* mock RegistrationResponseJSON */ };
+            const response: RegistrationResponseJSON = {
+                id: "test-id",
+                rawId: "test-raw-id",
+                response: {
+                    attestationObject: "test-attestation-object",
+                    clientDataJSON: "test-client-data-json",
+                },
+                clientExtensionResults: {},
+                type: "public-key",
+            };
             mockedGetChallenge.mockResolvedValueOnce(null);
 
             await expect(verifyRegistration(reqMock as Request, userMock, response)).rejects.toThrow("Challenge expired or missing");
@@ -101,7 +126,16 @@ describe("Registration Utility Functions", () => {
         });
 
         it("should throw an error if verification fails", async () => {
-            const response = { /* mock RegistrationResponseJSON */ };
+            const response: RegistrationResponseJSON = {
+                id: "test-id",
+                rawId: "test-raw-id",
+                response: {
+                    attestationObject: "test-attestation-object",
+                    clientDataJSON: "test-client-data-json",
+                },
+                clientExtensionResults: {},
+                type: "public-key",
+            };
             const verifiedResponse: VerifiedRegistrationResponse = { verified: false };
             const challenge = "stored-challenge";
 
@@ -121,7 +155,16 @@ describe("Registration Utility Functions", () => {
         });
 
         it("should throw an error if verifyRegistrationResponse throws", async () => {
-            const response = { /* mock RegistrationResponseJSON */ };
+            const response: RegistrationResponseJSON = {
+                id: "test-id",
+                rawId: "test-raw-id",
+                response: {
+                    attestationObject: "test-attestation-object",
+                    clientDataJSON: "test-client-data-json",
+                },
+                clientExtensionResults: {},
+                type: "public-key",
+            };
             const challenge = "stored-challenge";
 
             mockedGetChallenge.mockResolvedValueOnce(challenge);
