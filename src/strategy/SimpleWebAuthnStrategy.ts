@@ -10,6 +10,12 @@ import type {
  * Options for configuring the SimpleWebAuthnStrategy.
  */
 export interface SimpleWebAuthnStrategyOptions {
+  /**
+   * A function to retrieve user information based on the request and user ID.
+   * @param req - The Express request object.
+   * @param id - The unique identifier of the user as a Uint8Array.
+   * @returns A promise that resolves to the user object or null if not found.
+   */
   getUser: (
     req: Request,
     id: Uint8Array,
@@ -18,16 +24,32 @@ export interface SimpleWebAuthnStrategyOptions {
 
 /**
  * Passport strategy for WebAuthn authentication.
+ * @class SimpleWebAuthnStrategy
+ * @extends PassportStrategy
+ * @example
+ * const strategy = new SimpleWebAuthnStrategy({
+ *   getUser: async (req, id) => { /* ... *\/ },
+ * });
+ * passport.use(strategy);
  */
 export class SimpleWebAuthnStrategy extends PassportStrategy {
-  name = "simple-webauthn";
+  public name = "simple-webauthn";
   private options: SimpleWebAuthnStrategyOptions;
 
+  /**
+   * Creates an instance of SimpleWebAuthnStrategy.
+   * @param options - Configuration options for the strategy.
+   */
   constructor(options: SimpleWebAuthnStrategyOptions) {
     super();
     this.options = options;
   }
 
+  /**
+   * Authenticate request based on WebAuthn response.
+   * @param req - The Express request object.
+   * @param _options - Additional options (unused).
+   */
   authenticate(req: Request, _options?: any): void {
     (async (): Promise<void> => {
       try {

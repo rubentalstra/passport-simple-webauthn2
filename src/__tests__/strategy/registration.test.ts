@@ -1,6 +1,10 @@
 // src/__tests__/strategy/registration.test.ts
 
-import { generateRegistration, verifyRegistration } from "passport-simple-webauthn2";
+// Mock the required modules
+jest.mock("../../strategy/challengeStore");
+jest.mock("@simplewebauthn/server");
+
+import { generateRegistration, verifyRegistration } from "../../strategy/registration";
 import {
     generateRegistrationOptions,
     RegistrationResponseJSON,
@@ -13,10 +17,6 @@ import { RegistrationUser } from "../../strategy/registration";
 import type { Request } from "express";
 
 import { Buffer } from "buffer"; // Ensure Buffer is available
-
-// Mock the required modules
-jest.mock("../../strategy/challengeStore");
-jest.mock("@simplewebauthn/server");
 
 // Type assertions for mocked functions
 const mockedGenerateRegistrationOptions = generateRegistrationOptions as jest.MockedFunction<typeof generateRegistrationOptions>;

@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import type {
   VerifiedRegistrationResponse,
+  PublicKeyCredentialCreationOptionsJSON,
   RegistrationResponseJSON,
   WebAuthnCredential,
 } from "@simplewebauthn/server";
@@ -10,17 +11,42 @@ import {
 } from "@simplewebauthn/server";
 import { saveChallenge, getChallenge, clearChallenge } from "./challengeStore";
 
+/**
+ * Represents a user during the registration process.
+ */
 export interface RegistrationUser {
+  /**
+   * Unique identifier for the user.
+   */
   id: Uint8Array;
+
+  /**
+   * Username of the user.
+   */
   name: string;
+
+  /**
+   * Display name of the user.
+   */
   displayName: string;
+
+  /**
+   * Array of existing WebAuthn credentials associated with the user.
+   */
   credentials: WebAuthnCredential[];
 }
 
+/**
+ * Generates registration options for a new WebAuthn credential.
+ * @param req - The Express request object.
+ * @param user - The user registering a new credential.
+ * @returns A promise that resolves to the registration options JSON.
+ * @throws Will throw an error if userId or challenge is invalid.
+ */
 export const generateRegistration = async (
   req: Request,
   user: RegistrationUser,
-) => {
+): Promise<PublicKeyCredentialCreationOptionsJSON> => {
   const options = await generateRegistrationOptions({
     rpName: process.env.RP_NAME || "Example RP",
     rpID: process.env.RP_ID || "example.com",
@@ -43,6 +69,14 @@ export const generateRegistration = async (
   return options;
 };
 
+/**
+ * Verifies the registration response from the client.
+ * @param req - The Express request object.
+ * @param user - The user registering a new credential.
+ * @param response - The registration response JSON from the client.
+ * @returns A promise that resolves to the verified registration response.
+ * @throws Will throw an error if the challenge is missing or verification fails.
+ */
 export const verifyRegistration = async (
   req: Request,
   user: RegistrationUser,
