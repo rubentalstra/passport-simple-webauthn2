@@ -71,7 +71,7 @@
     "typescript-eslint": "^8.22.0"
   },
   "engines": {
-    "node": ">=14"
+    "node": ">=21"
   },
   "exports": {
     ".": {

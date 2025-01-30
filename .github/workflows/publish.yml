@@ -22,8 +22,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '16'  # Specify the Node.js version you want to use
-          registry-url: 'https://npm.pkg.github.com/'  # Set GitHub Packages as the registry
+          node-version: '21'
+          registry-url: 'https://npm.pkg.github.com/'
 
       # 3. Cache npm dependencies to speed up builds
       - name: Cache npm dependencies
