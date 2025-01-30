@@ -1,6 +1,6 @@
 {
   "name": "passport-simple-webauthn2",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Passport strategy for authenticating with Web Authentication (WebAuthn) using FIDO2 Passkeys.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -42,7 +42,7 @@
   "peerDependencies": {
     "express": "^4.17.0",
     "express-session": "^1.17.0",
-    "passport": "^0.6.0"
+    "passport": "^0.7.0"
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.1.1",
