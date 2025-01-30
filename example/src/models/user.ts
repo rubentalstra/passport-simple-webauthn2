@@ -1,8 +1,14 @@
 // src/models/user.ts
 import { Passkey, UserModel } from "passport-simple-webauthn2";
-import * as crypto from "node:crypto";
+import crypto from "crypto";
 
+/**
+ * Represents a user in the application.
+ */
 export interface User extends UserModel {
+    /**
+     * Array of WebAuthn credentials associated with the user.
+     */
     credentials: Passkey[];
 }
 
@@ -10,7 +16,7 @@ const users: Map<string, User> = new Map();
 
 /**
  * Finds a user by their ID.
- * @param id - The user's unique identifier.
+ * @param id - The user's unique identifier as a Uint8Array.
  * @returns The user object or undefined if not found.
  */
 export const findUserById = (id: Uint8Array): User | undefined => {

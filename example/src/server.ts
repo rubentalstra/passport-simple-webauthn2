@@ -18,7 +18,7 @@ app.use(
         secret: process.env.SESSION_SECRET || "default_secret",
         resave: false,
         saveUninitialized: false,
-    }),
+    })
 );
 
 // Initialize Passport and restore authentication state, if any, from the session.
