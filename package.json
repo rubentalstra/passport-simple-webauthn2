@@ -16,10 +16,10 @@
     "prepare": "npm run build",
     "lint": "eslint --fix src",
     "docs": "typedoc --out docs src/index.ts",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "prepublishOnly": "npm run lint && npm run test --passWithNoTests && npm run build"
+    "prepublishOnly": "npm run lint && npm run test && npm run build"
   },
   "repository": {
     "type": "git",
