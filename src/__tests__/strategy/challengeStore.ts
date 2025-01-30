@@ -5,7 +5,7 @@ describe("Challenge Store Functions", () => {
     const challenge = "test-challenge";
 
     beforeEach(async () => {
-        await resetChallengeStore(); // Ensure fresh state before each test
+        resetChallengeStore(); // Ensure fresh state before each test
     });
 
     afterEach(() => {
@@ -39,7 +39,7 @@ describe("Challenge Store Functions", () => {
 
     it("should reset the challenge store and remove all challenges", async () => {
         await saveChallenge(userId, challenge);
-        await resetChallengeStore();
+        resetChallengeStore();
         const retrievedChallenge = await getChallenge(userId);
         expect(retrievedChallenge).toBeNull();
     });
