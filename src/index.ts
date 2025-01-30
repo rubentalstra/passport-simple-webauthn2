@@ -15,5 +15,6 @@ export {
   saveChallenge,
   getChallenge,
   clearChallenge,
+  resetChallengeStore,
 } from "./strategy/challengeStore";
 export type { UserModel, Passkey } from "./models/types";
