@@ -1,0 +1,126 @@
+<!-- views/login.ejs -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <script>
+        /**
+         * Converts a Base64URL string to an ArrayBuffer.
+         * @param {string} base64url - The Base64URL string.
+         * @returns {ArrayBuffer} The resulting ArrayBuffer.
+         */
+        function base64URLToArrayBuffer(base64url) {
+            const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
+            const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        /**
+         * Converts an ArrayBuffer to a Base64URL string.
+         * @param {ArrayBuffer} buffer - The ArrayBuffer to convert.
+         * @returns {string} The resulting Base64URL string.
+         */
+        function arrayBufferToBase64URL(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        /**
+         * Initiates the WebAuthn authentication process.
+         * @param {Event} event - The form submission event.
+         */
+        async function startWebAuthnAuthentication(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value;
+            if (!username) {
+                return alert('Username is required!');
+            }
+
+            try {
+                // Request the authentication challenge from the server
+                const challengeResponse = await fetch('/login-challenge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username }),
+                });
+
+                if (!challengeResponse.ok) {
+                    const error = await challengeResponse.json();
+                    return alert('Error fetching authentication challenge: ' + error.error);
+                }
+
+                const options = await challengeResponse.json();
+
+                // Convert Base64URL-encoded fields to ArrayBuffers
+                options.challenge = base64URLToArrayBuffer(options.challenge);
+
+                if (options.allowCredentials) {
+                    options.allowCredentials = options.allowCredentials.map((cred) => ({
+                        ...cred,
+                        id: base64URLToArrayBuffer(cred.id),
+                    }));
+                }
+
+                // Get the credential using the browser's WebAuthn API
+                const credential = await navigator.credentials.get({ publicKey: options });
+
+                if (!credential) {
+                    return alert('Failed to get credential');
+                }
+
+                const assertionResponse = credential.response;
+
+                // Prepare the credential for sending to the server
+                const authenticationResponse = {
+                    id: credential.id,
+                    rawId: arrayBufferToBase64URL(credential.rawId),
+                    type: credential.type,
+                    response: {
+                        authenticatorData: arrayBufferToBase64URL(assertionResponse.authenticatorData),
+                        clientDataJSON: arrayBufferToBase64URL(assertionResponse.clientDataJSON),
+                        signature: arrayBufferToBase64URL(assertionResponse.signature),
+                        userHandle: assertionResponse.userHandle
+                            ? arrayBufferToBase64URL(assertionResponse.userHandle)
+                            : null,
+                    },
+                };
+
+                // Send the authentication response back to the server
+                const loginCallbackResponse = await fetch('/login-callback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, credential: authenticationResponse }),
+                });
+
+                const result = await loginCallbackResponse.json();
+                if (result.success) {
+                    window.location.href = '/account';
+                } else {
+                    alert('Authentication failed: ' + result.error);
+                }
+            } catch (error) {
+                console.error(error);
+                alert('An error occurred during authentication.');
+            }
+        }
+    </script>
+</head>
+<body>
+<h1>Login</h1>
+<form onsubmit="startWebAuthnAuthentication(event)">
+    <input type="text" id="username" placeholder="Enter Username" required>
+    <button type="submit">Login</button>
+</form>
+</body>
+</html>

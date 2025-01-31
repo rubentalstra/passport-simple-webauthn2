@@ -1,0 +1,23 @@
+<!-- views/account.ejs -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Account</title>
+</head>
+<body>
+<h1>Welcome, <%= user.username %>!</h1>
+<p>User ID: <%= user.userID %></p>
+<h2>Your Passkeys:</h2>
+<ul>
+    <% user.passkeys.forEach(function(passkey) { %>
+        <li>
+            ID: <%= passkey.id %><br>
+            Counter: <%= passkey.counter %><br>
+            Transports: <%= passkey.transports?.join(', ') || 'N/A' %>
+        </li>
+    <% }) %>
+</ul>
+<a href="/logout">Logout</a>
+</body>
+</html>
