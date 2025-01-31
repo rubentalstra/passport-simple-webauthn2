@@ -1,64 +1,42 @@
-<% layout('layout') -%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Register</title>
+</head>
+<body>
 <h1>Register</h1>
 <form id="register-form">
-    <label for="username">Username:</label>
-    <input type="text" id="username" name="username" required />
+    <input type="text" id="username" placeholder="Enter Username" required>
     <button type="submit">Register</button>
 </form>
+
 <script>
-    const registerForm = document.getElementById('register-form');
-    registerForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
+    document.getElementById('register-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
         const username = document.getElementById('username').value;
+        if (!username) return alert("Username is required!");
 
-        // Step 1: Create User
-        const res1 = await fetch('/register', {
+        const optionsRes = await fetch('/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username }),
+            body: JSON.stringify({ username })
         });
 
-        const options = await res1.json();
+        const options = await optionsRes.json();
+        options.challenge = Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0));
+        options.user.id = Uint8Array.from(atob(options.user.id), c => c.charCodeAt(0));
 
-        // Step 2: Create Credential
-        const credential = await navigator.credentials.create({
-            publicKey: options,
-        });
+        const credential = await navigator.credentials.create({ publicKey: options });
 
-        // Convert ArrayBuffers to strings
-        const attestationObject = bufferToBase64Url(credential.response.attestationObject);
-        const clientDataJSON = bufferToBase64Url(credential.response.clientDataJSON);
-
-        // Step 3: Send Credential to Server
-        const res2 = await fetch('/register/callback', {
+        await fetch('/register/callback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username,
-                response: {
-                    id: credential.id,
-                    rawId: bufferToBase64Url(credential.rawId),
-                    response: {
-                        attestationObject,
-                        clientDataJSON,
-                    },
-                    type: credential.type,
-                    // Include any extensions if used
-                },
-            }),
+            body: JSON.stringify({ username, response: credential })
         });
 
-        if (res2.ok) {
-            alert('Registration successful!');
-            window.location.href = '/login';
-        } else {
-            const error = await res2.text();
-            alert('Registration failed: ' + error);
-        }
+        alert("Registration successful!");
+        window.location.href = "/login";
     });
-
-    function bufferToBase64Url(buffer) {
-        return btoa(String.fromCharCode(...new Uint8Array(buffer)))
-            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
 </script>
+</body>
+</html>

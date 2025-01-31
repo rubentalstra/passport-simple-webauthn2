@@ -1,7 +1,4 @@
-// tests/unit/strategy/verifyAuthentication.test.ts
-
 import { verifyAuthentication } from '../../../src/strategy/verifyAuthentication';
-import { getChallenge, clearChallenge } from '../../../src/challengeStore';
 import { Passkey } from '../../../src/types';
 import {
     AuthenticationResponseJSON,
@@ -9,12 +6,7 @@ import {
     verifyAuthenticationResponse
 } from "@simplewebauthn/server";
 
-// Mock the challengeStore and verifyAuthenticationResponse
-jest.mock('../../../src/challengeStore', () => ({
-    getChallenge: jest.fn(),
-    clearChallenge: jest.fn(),
-}));
-
+// Mock verifyAuthenticationResponse from the WebAuthn server
 jest.mock('@simplewebauthn/server', () => ({
     verifyAuthenticationResponse: jest.fn(),
 }));
@@ -39,7 +31,6 @@ describe('verifyAuthentication', () => {
             credentialBackedUp: false,
             origin: 'https://example.com',
             rpID: 'example.com',
-            // Add other required fields if any
         },
     };
 
@@ -53,8 +44,8 @@ describe('verifyAuthentication', () => {
             userHandle: 'userHandle123',
         },
         type: 'public-key',
-        authenticatorAttachment: 'platform', // Filled with a realistic value
-        clientExtensionResults: { // Filled with realistic mock extension data
+        authenticatorAttachment: 'platform',
+        clientExtensionResults: {
             appid: true,
             credProps: { rk: true },
             hmacCreateSecret: false,
@@ -62,17 +53,17 @@ describe('verifyAuthentication', () => {
     };
 
     it('should verify authentication and update the passkey counter', async () => {
-        (getChallenge as jest.Mock).mockResolvedValue('challenge123');
         (verifyAuthenticationResponse as jest.Mock).mockResolvedValue(mockVerifiedResponse);
         const findPasskey = jest.fn().mockResolvedValue(mockPasskey);
         const updatePasskeyCounter = jest.fn().mockResolvedValue(undefined);
 
-        const result = await verifyAuthentication(mockResponse, findPasskey, updatePasskeyCounter);
+        const expectedChallenge = 'challenge123'; // Passed externally
 
-        expect(getChallenge).toHaveBeenCalledWith(mockResponse.id);
+        const result = await verifyAuthentication(mockResponse, expectedChallenge, findPasskey, updatePasskeyCounter);
+
         expect(verifyAuthenticationResponse).toHaveBeenCalledWith({
             response: mockResponse,
-            expectedChallenge: 'challenge123',
+            expectedChallenge: expectedChallenge, // Now passed externally
             expectedOrigin: 'https://example.com',
             expectedRPID: 'example.com',
             credential: {
@@ -85,34 +76,30 @@ describe('verifyAuthentication', () => {
         });
         expect(findPasskey).toHaveBeenCalledWith(mockResponse.id);
         expect(updatePasskeyCounter).toHaveBeenCalledWith(mockPasskey.id, mockVerifiedResponse.authenticationInfo.newCounter);
-        expect(clearChallenge).toHaveBeenCalledWith(mockResponse.id);
         expect(result).toEqual(mockVerifiedResponse);
     });
 
     it('should throw an error if the authentication response is invalid', async () => {
-        await expect(verifyAuthentication(null as any, jest.fn(), jest.fn())).rejects.toThrow('Invalid authentication response');
+        await expect(verifyAuthentication(null as any, 'challenge123', jest.fn(), jest.fn()))
+            .rejects.toThrow('Invalid authentication response');
     });
 
     it('should throw an error if the challenge is missing', async () => {
-        (getChallenge as jest.Mock).mockResolvedValue(null);
-
-        await expect(verifyAuthentication(mockResponse, jest.fn(), jest.fn())).rejects.toThrow('Challenge expired or missing');
+        await expect(verifyAuthentication(mockResponse, '', jest.fn(), jest.fn()))
+            .rejects.toThrow("Passkey not found or does not exist");
     });
 
     it('should throw an error if passkey is not found', async () => {
-        (getChallenge as jest.Mock).mockResolvedValue('challenge123');
         const findPasskey = jest.fn().mockResolvedValue(null);
-
-        await expect(verifyAuthentication(mockResponse, findPasskey, jest.fn())).rejects.toThrow('Passkey not found or does not exist');
+        await expect(verifyAuthentication(mockResponse, 'challenge123', findPasskey, jest.fn()))
+            .rejects.toThrow('Passkey not found or does not exist');
     });
 
     it('should throw an error if verification fails', async () => {
-        // Arrange
-        (getChallenge as jest.Mock).mockResolvedValue('challenge123');
         (verifyAuthenticationResponse as jest.Mock).mockResolvedValue({ verified: false } as VerifiedAuthenticationResponse);
         const findPasskey = jest.fn().mockResolvedValue(mockPasskey);
 
-        // Act & Assert
-        await expect(verifyAuthentication(mockResponse, findPasskey, jest.fn())).rejects.toThrow('Authentication failed');
+        await expect(verifyAuthentication(mockResponse, 'challenge123', findPasskey, jest.fn()))
+            .rejects.toThrow('Authentication failed');
     });
 });

@@ -1,28 +1,19 @@
-<!-- src/views/account.ejs -->
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Account - Passport WebAuthn2</title>
+    <title>Account</title>
 </head>
 <body>
-<h1>Account</h1>
-<p>Username: <%= user.username %></p>
-<h2>Registered Passkeys</h2>
+<h1>Account Page</h1>
+<p>Welcome, <%= user.username %></p>
+
+<h2>Your Registered Passkeys</h2>
 <ul>
-    <% user.passkeys.forEach(passkey => { %>
-        <li>
-            <strong>Credential ID:</strong> <%= passkey.id %><br/>
-            <strong>Device Type:</strong> <%= passkey.deviceType %><br/>
-            <strong>Transports:</strong> <%= passkey.transports.join(', ') %><br/>
-            <strong>Backed Up:</strong> <%= passkey.backedUp ? 'Yes' : 'No' %><br/>
-            <strong>Counter:</strong> <%= passkey.counter %>
-        </li>
+    <% passkeys.forEach(passkey => { %>
+        <li>Passkey ID: <%= passkey.id %></li>
     <% }) %>
 </ul>
-<a href="/">Home</a>
-<form action="/logout" method="POST">
-    <button type="submit">Logout</button>
-</form>
+
+<a href="/logout">Logout</a>
 </body>
 </html>

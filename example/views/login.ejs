@@ -1,72 +1,59 @@
-<% layout('layout') -%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Login</title>
+</head>
+<body>
 <h1>Login</h1>
 <form id="login-form">
-    <label for="username">Username:</label>
-    <input type="text" id="username" name="username" required />
+    <input type="text" id="username" name="username" placeholder="Enter Username" required>
     <button type="submit">Login</button>
 </form>
+
 <script>
-    const loginForm = document.getElementById('login-form');
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
+    document.getElementById('login-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
         const username = document.getElementById('username').value;
+        if (!username) return alert("Username is required!");
 
-        // Step 1: Initiate Login and get assertion options
-        const res1 = await fetch('/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username }),
-        });
+        try {
+            // Step 1: Request login options from the server
+            const optionsRes = await fetch('/login/options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+            const options = await optionsRes.json();
 
-        if (!res1.ok) {
-            const error = await res1.text();
-            alert('Login failed: ' + error);
-            return;
-        }
+            // Step 2: Get credential for authentication
+            const credential = await navigator.credentials.get({
+                publicKey: options
+            });
 
-        const options = await res1.json();
+            // Step 3: Submit to Passport.js authentication
+            const loginForm = document.createElement("form");
+            loginForm.method = "POST";
+            loginForm.action = "/login";
 
-        // Step 2: Get Credential
-        const credential = await navigator.credentials.get({
-            publicKey: options,
-        });
+            const usernameInput = document.createElement("input");
+            usernameInput.type = "hidden";
+            usernameInput.name = "username";
+            usernameInput.value = username;
 
-        // Convert ArrayBuffers to strings
-        const authenticatorData = bufferToBase64Url(credential.response.authenticatorData);
-        const clientDataJSON = bufferToBase64Url(credential.response.clientDataJSON);
-        const signature = bufferToBase64Url(credential.response.signature);
-        const userHandle = bufferToBase64Url(credential.response.userHandle);
+            const credentialInput = document.createElement("input");
+            credentialInput.type = "hidden";
+            credentialInput.name = "response";
+            credentialInput.value = JSON.stringify(credential);
 
-        // Step 3: Send Assertion to Server
-        const res2 = await fetch('/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                response: {
-                    id: credential.id,
-                    rawId: bufferToBase64Url(credential.rawId),
-                    response: {
-                        authenticatorData,
-                        clientDataJSON,
-                        signature,
-                        userHandle,
-                    },
-                    type: credential.type,
-                    // Include any extensions if used
-                },
-            }),
-        });
-
-        if (res2.ok) {
-            window.location.href = '/dashboard';
-        } else {
-            const error = await res2.text();
-            alert('Authentication failed: ' + error);
+            loginForm.appendChild(usernameInput);
+            loginForm.appendChild(credentialInput);
+            document.body.appendChild(loginForm);
+            loginForm.submit();
+        } catch (error) {
+            console.error(error);
+            alert("Login failed!");
         }
     });
-
-    function bufferToBase64Url(buffer) {
-        return btoa(String.fromCharCode(...new Uint8Array(buffer)))
-            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
 </script>
+</body>
+</html>

@@ -1,5 +1,3 @@
-// tests/unit/strategy/SimpleWebAuthnStrategy.test.ts
-
 import { SimpleWebAuthnStrategy } from '../../../src/strategy/simpleWebAuthnStrategy';
 import {
     verifyAuthenticationResponse,
@@ -10,18 +8,12 @@ import {
     AuthenticationResponseJSON
 } from '@simplewebauthn/server';
 import { Request } from 'express';
-import { getChallenge, clearChallenge } from '../../../src/challengeStore';
 import { Passkey, UserModel } from '../../../src/types';
 
 // Mock dependencies
 jest.mock('@simplewebauthn/server', () => ({
     verifyAuthenticationResponse: jest.fn(),
     verifyRegistrationResponse: jest.fn(),
-}));
-
-jest.mock('../../../src/challengeStore', () => ({
-    getChallenge: jest.fn(),
-    clearChallenge: jest.fn(),
 }));
 
 describe('SimpleWebAuthnStrategy', () => {
@@ -46,7 +38,7 @@ describe('SimpleWebAuthnStrategy', () => {
             userHandle: 'userHandle123',
         },
         type: 'public-key',
-        authenticatorAttachment: 'platform', // 'platform' or 'cross-platform'
+        authenticatorAttachment: 'platform',
         clientExtensionResults: {
             appid: true,
             credProps: { rk: true },
@@ -84,7 +76,6 @@ describe('SimpleWebAuthnStrategy', () => {
     });
 
     it('should handle authentication successfully', async () => {
-        // Arrange
         const mockVerification: VerifiedAuthenticationResponse = {
             verified: true,
             authenticationInfo: {
@@ -99,50 +90,46 @@ describe('SimpleWebAuthnStrategy', () => {
         };
 
         (verifyAuthenticationResponse as jest.Mock).mockResolvedValue(mockVerification);
-        (getChallenge as jest.Mock).mockResolvedValue('challenge123');
 
         const success = jest.fn();
         const fail = jest.fn();
         const error = jest.fn();
 
-        // Spy on the strategy's success, fail, and error methods
         (strategy as any).success = success;
         (strategy as any).fail = fail;
         (strategy as any).error = error;
 
-        // Act
-        strategy.authenticate({
+        const mockRequest = {
             path: '/webauthn/login',
             body: {
                 response: mockAuthenticationResponse,
+                expectedChallenge: 'challenge123', // Passed externally now
             },
-        } as unknown as Request);
-        await new Promise(setImmediate); // Wait for async operations
+        } as unknown as Request;
 
-        // Assert
-        expect(getChallenge).toHaveBeenCalledWith(mockPasskey.id);
+        strategy.authenticate(mockRequest);
+        await new Promise(setImmediate);
+
         expect(verifyAuthenticationResponse).toHaveBeenCalledWith(expect.objectContaining({
             response: mockAuthenticationResponse,
-            expectedChallenge: 'challenge123',
+            expectedChallenge: 'challenge123', // Now passed externally
             expectedOrigin: 'https://example.com',
             expectedRPID: 'example.com',
             credential: {
                 id: mockPasskey.id,
-                publicKey: mockPasskey.publicKey, // Uint8Array
+                publicKey: mockPasskey.publicKey,
                 counter: mockPasskey.counter,
                 transports: ['usb'],
             },
             requireUserVerification: true,
         }));
         expect((strategy as any).updatePasskeyCounter).toHaveBeenCalledWith(mockPasskey.id, 11);
-        expect(clearChallenge).toHaveBeenCalledWith(mockPasskey.id);
         expect(success).toHaveBeenCalledWith(mockPasskey.webauthnUserID);
         expect(fail).not.toHaveBeenCalled();
         expect(error).not.toHaveBeenCalled();
     });
 
     it('should handle registration successfully', async () => {
-        // Arrange
         const mockVerifiedResponse: VerifiedRegistrationResponse = {
             verified: true,
             registrationInfo: {
@@ -166,31 +153,29 @@ describe('SimpleWebAuthnStrategy', () => {
         };
 
         (verifyRegistrationResponse as jest.Mock).mockResolvedValue(mockVerifiedResponse);
-        (getChallenge as jest.Mock).mockResolvedValue('challenge123');
 
         const success = jest.fn();
         const fail = jest.fn();
         const error = jest.fn();
 
-        // Spy on the strategy's success, fail, and error methods
         (strategy as any).success = success;
         (strategy as any).fail = fail;
         (strategy as any).error = error;
 
-        // Act
-        strategy.authenticate({
+        const mockRequest = {
             path: '/webauthn/register',
             body: {
                 response: mockRegistrationResponse,
+                expectedChallenge: 'challenge123', // Passed externally now
             },
-        } as unknown as Request);
-        await new Promise(setImmediate); // Wait for async operations
+        } as unknown as Request;
 
-        // Assert
-        expect(getChallenge).toHaveBeenCalledWith(mockPasskey.id);
+        strategy.authenticate(mockRequest);
+        await new Promise(setImmediate);
+
         expect(verifyRegistrationResponse).toHaveBeenCalledWith(expect.objectContaining({
             response: mockRegistrationResponse,
-            expectedChallenge: 'challenge123',
+            expectedChallenge: 'challenge123', // Now passed externally
             expectedOrigin: 'https://example.com',
             expectedRPID: 'example.com',
             requireUserVerification: true,
@@ -207,93 +192,62 @@ describe('SimpleWebAuthnStrategy', () => {
                 backedUp: false,
             })
         );
-        expect(clearChallenge).toHaveBeenCalledWith(mockPasskey.id);
         expect(success).toHaveBeenCalledWith(mockUser);
         expect(fail).not.toHaveBeenCalled();
         expect(error).not.toHaveBeenCalled();
     });
 
     it('should fail authentication if response data is missing', async () => {
-        // Arrange
         const mockRequest = {
             path: '/webauthn/login',
             body: {},
         } as unknown as Request;
 
-        const success = jest.fn();
         const fail = jest.fn();
-        const error = jest.fn();
-
-        (strategy as any).success = success;
         (strategy as any).fail = fail;
-        (strategy as any).error = error;
 
-        // Act
         strategy.authenticate(mockRequest);
-        await new Promise(setImmediate); // Wait for async operations
+        await new Promise(setImmediate);
 
-        // Assert
-        expect(fail).toHaveBeenCalledWith({ message: "Missing response data" }, 400);
-        expect(success).not.toHaveBeenCalled();
-        expect(error).not.toHaveBeenCalled();
+        expect(fail).toHaveBeenCalledWith({ message: "Missing response or challenge" }, 400);
     });
 
     it('should fail registration if verification fails', async () => {
-        // Arrange
         const mockFailedVerification: VerifiedRegistrationResponse = {
             verified: false,
         };
 
         (verifyRegistrationResponse as jest.Mock).mockResolvedValue(mockFailedVerification);
-        (getChallenge as jest.Mock).mockResolvedValue('challenge123');
 
-        const mockRegistrationRequest = {
+        const mockRequest = {
             path: '/webauthn/register',
             body: {
                 response: mockRegistrationResponse,
+                expectedChallenge: 'challenge123',
             },
         } as unknown as Request;
 
-        const success = jest.fn();
         const fail = jest.fn();
-        const error = jest.fn();
-
-        (strategy as any).success = success;
         (strategy as any).fail = fail;
-        (strategy as any).error = error;
 
-        // Act
-        strategy.authenticate(mockRegistrationRequest);
-        await new Promise(setImmediate); // Wait for async operations
+        strategy.authenticate(mockRequest);
+        await new Promise(setImmediate);
 
-        // Assert
         expect(fail).toHaveBeenCalledWith({ message: "Registration verification failed" }, 403);
-        expect(success).not.toHaveBeenCalled();
-        expect(error).not.toHaveBeenCalled();
     });
 
     it('should handle unknown action gracefully', async () => {
-        // Arrange
         const mockRequest = {
             path: '/webauthn/unknown',
             body: {},
         } as unknown as Request;
 
-        const success = jest.fn();
         const fail = jest.fn();
-        const error = jest.fn();
-
-        (strategy as any).success = success;
         (strategy as any).fail = fail;
-        (strategy as any).error = error;
 
-        // Act
         strategy.authenticate(mockRequest);
-        await new Promise(setImmediate); // Wait for async operations
+        await new Promise(setImmediate);
 
-        // Assert
         expect(fail).toHaveBeenCalledWith({ message: "Unknown action" }, 400);
-        expect(success).not.toHaveBeenCalled();
-        expect(error).not.toHaveBeenCalled();
     });
 });

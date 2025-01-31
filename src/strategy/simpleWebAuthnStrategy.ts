@@ -1,5 +1,3 @@
-// strategy/simpleWebAuthnStrategy.ts
-
 import { Strategy } from "passport-strategy";
 import type { Request } from "express";
 import type {
@@ -10,7 +8,6 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import { getChallenge, clearChallenge } from "../challengeStore";
 import type { SimpleWebAuthnStrategyOptions, Passkey } from "../types";
 
 /**
@@ -50,14 +47,9 @@ export class SimpleWebAuthnStrategy extends Strategy {
 
   private async handleAuthentication(req: Request): Promise<void> {
     try {
-      const { response } = req.body;
-      if (!response) {
-        return this.fail({ message: "Missing response data" }, 400);
-      }
-
-      const storedChallenge = await getChallenge(response.id);
-      if (!storedChallenge) {
-        return this.fail({ message: "Challenge expired or missing" }, 403);
+      const { response, expectedChallenge } = req.body;
+      if (!response || !expectedChallenge) {
+        return this.fail({ message: "Missing response or challenge" }, 400);
       }
 
       const passkey = await this.findPasskeyByCredentialID(response.id);
@@ -68,7 +60,7 @@ export class SimpleWebAuthnStrategy extends Strategy {
       const verification: VerifiedAuthenticationResponse =
         await verifyAuthenticationResponse({
           response,
-          expectedChallenge: storedChallenge,
+          expectedChallenge, // Now passed externally
           expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
           expectedRPID: process.env.RP_ID || "example.com",
           credential: {
@@ -88,7 +80,6 @@ export class SimpleWebAuthnStrategy extends Strategy {
         passkey.id,
         verification.authenticationInfo.newCounter,
       );
-      await clearChallenge(response.id);
 
       this.success(passkey.webauthnUserID);
     } catch (error) {
@@ -100,20 +91,15 @@ export class SimpleWebAuthnStrategy extends Strategy {
 
   private async handleRegistration(req: Request): Promise<void> {
     try {
-      const { response } = req.body;
-      if (!response) {
-        return this.fail({ message: "Missing response data" }, 400);
-      }
-
-      const storedChallenge = await getChallenge(response.id);
-      if (!storedChallenge) {
-        return this.fail({ message: "Challenge expired or missing" }, 403);
+      const { response, expectedChallenge } = req.body;
+      if (!response || !expectedChallenge) {
+        return this.fail({ message: "Missing response or challenge" }, 400);
       }
 
       const verification: VerifiedRegistrationResponse =
         await verifyRegistrationResponse({
           response,
-          expectedChallenge: storedChallenge,
+          expectedChallenge, // Now passed externally
           expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
           expectedRPID: process.env.RP_ID || "example.com",
           requireUserVerification: true,
@@ -123,7 +109,8 @@ export class SimpleWebAuthnStrategy extends Strategy {
         return this.fail({ message: "Registration verification failed" }, 403);
       }
 
-      const webauthnUserID = response.id;
+      // ✅ FIX: Use correct WebAuthn user ID from registrationInfo instead of response.id
+      const webauthnUserID = verification.registrationInfo.credential.id;
       if (!webauthnUserID) {
         return this.fail(
           {
@@ -144,14 +131,13 @@ export class SimpleWebAuthnStrategy extends Strategy {
         publicKey: verification.registrationInfo.credential.publicKey, // Uint8Array
         user: user,
         counter: verification.registrationInfo.credential.counter,
-        webauthnUserID: user.id,
+        webauthnUserID: user.id, // ✅ Ensure correct WebAuthn ID is stored
         transports: verification.registrationInfo.credential.transports ?? [],
         deviceType: verification.registrationInfo.credentialDeviceType,
         backedUp: verification.registrationInfo.credentialBackedUp,
       };
 
       await this.registerPasskey(user, newPasskey);
-      await clearChallenge(response.id);
 
       this.success(user);
     } catch (error) {
