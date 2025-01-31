@@ -72,7 +72,6 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Username required' });
     }
 
-    // Find existing user or create a new one
     let user = Object.values(users).find((u) => u.username === username);
     if (!user) {
         const userID = uuidv4();
@@ -80,35 +79,27 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
         users[userID] = user;
     }
 
-    // Generate registration options
+    // Generate WebAuthn registration options
     const options = await generateRegistrationOptions({
         rpName: process.env.RP_NAME || 'WebAuthn Demo',
         rpID: process.env.RP_ID || 'localhost',
         userID: Buffer.from(user.userID, 'utf-8'),
         userName: user.username,
         attestationType: 'none',
-        // Exclude already registered credentials
         excludeCredentials: user.passkeys.map((cred) => ({
-            id: cred.id, // Convert Base64URL string to Buffer
+            id: cred.id,
             type: 'public-key',
-            transports: cred.transports,
+            transports: cred.transports || ['internal', 'usb', 'ble', 'nfc'],
         })),
         authenticatorSelection: {
-            userVerification: 'preferred',
-            authenticatorAttachment: 'platform',
+            userVerification: 'required', // Ensures biometrics are used
+            residentKey: 'required', // Allows persistent authentication
+            authenticatorAttachment: 'platform', // ✅ Forces Touch ID
         },
     });
 
-    // Store the challenge for this user
     challenges[user.userID] = bufferToBase64URL(options.challenge);
-
-    // Serialize options to send to the client
-    const optionsJSON = serializeRegistrationOptions(options);
-
-    // Optional: Log the serialized options for debugging
-    console.log('Registration Options Sent to Client:', optionsJSON);
-
-    res.json(optionsJSON);
+    res.json(serializeRegistrationOptions(options));
 });
 
 /**
@@ -209,27 +200,24 @@ router.post('/login-challenge', async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'User not found' });
     }
 
-    // Generate authentication options
+    // Ensure platform credentials (Touch ID) are prioritized
+    const platformCredentials = user.passkeys.filter(cred => cred.transports?.includes('internal'));
+
     const options = await generateAuthenticationOptions({
         rpID: process.env.RP_ID || 'localhost',
-        userVerification: 'discouraged', // Adjust based on your security requirements
-        allowCredentials: user.passkeys.map((cred: WebAuthnCredential) => ({
+        userVerification: 'required',
+        allowCredentials: platformCredentials.length > 0 ? platformCredentials.map(cred => ({
             id: cred.id,
             type: 'public-key',
             transports: cred.transports,
-        })),
+        })) : undefined, // Let the browser decide if no credentials are found
+        extensions: {
+            credProps: true,
+        },
     });
 
-    // Store the challenge for this user
     challenges[user.userID] = bufferToBase64URL(options.challenge);
-
-    // Serialize options to send to the client
-    const optionsJSON = serializeAuthenticationOptions(options);
-
-    // Optional: Log the serialized options for debugging
-    console.log('Authentication Options Sent to Client:', optionsJSON);
-
-    res.json(optionsJSON);
+    res.json(serializeAuthenticationOptions(options));
 });
 
 /**
