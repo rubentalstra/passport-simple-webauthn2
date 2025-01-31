@@ -32,7 +32,7 @@ app.use(
         saveUninitialized: false,
         cookie: {
             secure: false, // Change to `true` if using HTTPS
-            httpOnly: true, // Prevent JavaScript access
+            httpOnly: false, // Prevent JavaScript access
             sameSite: "lax", // Helps prevent CSRF attacks
             maxAge: 24 * 60 * 60 * 1000, // 1 day session expiry
         },

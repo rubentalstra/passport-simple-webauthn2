@@ -1,11 +1,12 @@
+// utils.ts
+
 export type Base64URLString = string;
 
-// utils.ts
 export function bufferToBase64URL(
   input: ArrayBuffer | Buffer | string,
 ): string {
   if (typeof input === "string") {
-    return input; // assume already base64url encoded
+    return input; // assume it's already a base64url string
   }
   return Buffer.from(input).toString("base64url");
 }

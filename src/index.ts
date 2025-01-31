@@ -115,10 +115,10 @@ export class WebAuthnStrategy extends PassportStrategy {
       const { publicKey, id, counter, transports } =
         verification.registrationInfo.credential;
 
-      // Store the id as provided and convert publicKey into a Buffer
+      // Convert id to base64url and publicKey to Uint8Array
       user.passkeys.push({
-        id: id,
-        publicKey: Buffer.from(publicKey),
+        id: bufferToBase64URL(id),
+        publicKey: new Uint8Array(publicKey),
         counter,
         transports,
       });
@@ -146,11 +146,11 @@ export class WebAuthnStrategy extends PassportStrategy {
     const options = await generateAuthenticationOptions({
       rpID: this.rpID,
       userVerification: "required",
-      // Pass the stored credential IDs directly
+      // Convert credential IDs to base64url strings
       allowCredentials:
         platformCredentials.length > 0
           ? platformCredentials.map((cred) => ({
-              id: cred.id,
+              id: bufferToBase64URL(cred.id),
               type: "public-key",
               transports: cred.transports,
             }))
