@@ -1,12 +1,12 @@
-import express from "express";
-import authRoutes from "./auth";
+// src/routes/index.ts
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
-router.use("/auth", authRoutes);
-
-router.get("/", (req, res) => {
-    res.send("✅ SimpleWebAuthn Example Server Running!");
+// Home Page Route
+router.get('/', (req: Request, res: Response) => {
+    res.render('index', { user: req.user });
 });
 
 export default router;

@@ -13,12 +13,14 @@
   "description": "",
   "dependencies": {
     "@simplewebauthn/server": "^13.1.1",
+    "connect-mongo": "^5.1.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
+    "mongoose": "^8.9.5",
+    "node-cache": "^5.1.2",
     "passport": "^0.7.0",
-    "passport-simple-webauthn2": "^1.1.0",
-    "mongoose": "^8.9.5"
+    "passport-simple-webauthn2": "^1.1.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

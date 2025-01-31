@@ -144,7 +144,7 @@ export class SimpleWebAuthnStrategy extends Strategy {
       };
 
       // Corrected to pass only newPasskey
-      await this.registerPasskey(newPasskey);
+      await this.registerPasskey(user, newPasskey);
       await clearChallenge(response.id);
 
       this.success(user);

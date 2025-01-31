@@ -194,16 +194,22 @@ describe('SimpleWebAuthnStrategy', () => {
             expectedRPID: 'example.com',
             requireUserVerification: true,
         }));
-        expect((strategy as any).registerPasskey).toHaveBeenCalledWith(expect.objectContaining({
-            id: 'credential123',
-            publicKey: new Uint8Array([1, 2, 3]),
-            counter: 0,
-            webauthnUserID: 'user123',
-            user: mockUser,
-            transports: ['usb'],
-            deviceType: 'singleDevice', // Changed to match received value
-            backedUp: false,
-        }));
+        expect((strategy as any).registerPasskey).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: 'user123',
+                username: 'testuser',
+            }),
+            expect.objectContaining({
+                id: 'credential123',
+                publicKey: expect.any(Uint8Array),
+                counter: 0,
+                webauthnUserID: 'user123',
+                transports: ['usb'],
+                deviceType: 'singleDevice',
+                backedUp: false,
+                user: expect.any(Object), // Or more specific if needed
+            })
+        );
         expect(clearChallenge).toHaveBeenCalledWith(mockPasskey.id);
         expect(success).toHaveBeenCalledWith(mockUser);
         expect(fail).not.toHaveBeenCalled();

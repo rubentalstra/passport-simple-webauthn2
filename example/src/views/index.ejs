@@ -1,0 +1,20 @@
+<!-- src/views/index.ejs -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Home - Passport WebAuthn2</title>
+</head>
+<body>
+<h1>Welcome to Passport WebAuthn2 Example</h1>
+<% if (user) { %>
+    <p>Hello, <%= user.username %>!</p>
+    <a href="/account">Account</a>
+    <form action="/logout" method="POST">
+        <button type="submit">Logout</button>
+    </form>
+<% } else { %>
+    <a href="/register">Register</a> | <a href="/login">Login</a>
+<% } %>
+</body>
+</html>

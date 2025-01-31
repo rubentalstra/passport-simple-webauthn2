@@ -54,7 +54,7 @@ export const generateRegistration = async (
 export const verifyRegistration = async (
   response: RegistrationResponseJSON,
   findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>,
-  registerPasskey: (passkey: Passkey) => Promise<void>,
+  registerPasskey: (user: UserModel, passkey: Passkey) => Promise<void>,
 ): Promise<VerifiedRegistrationResponse> => {
   try {
     if (!response || !response.id) {
@@ -102,7 +102,7 @@ export const verifyRegistration = async (
     };
 
     // Corrected to pass only newPasskey
-    await registerPasskey(passkey);
+    await registerPasskey(user, passkey);
     await clearChallenge(response.id);
 
     return verification;

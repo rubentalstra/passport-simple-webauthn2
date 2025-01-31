@@ -1,0 +1,64 @@
+<!-- src/views/login.ejs -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - Passport WebAuthn2</title>
+    <script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@latest/dist/simplewebauthn-browser.min.js"></script>
+</head>
+<body>
+<h1>Login</h1>
+<form id="login-form">
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" required />
+    <button type="submit">Login</button>
+</form>
+
+<script>
+    const form = document.getElementById('login-form');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const username = document.getElementById('username').value;
+
+        try {
+            // Step 1: Request authentication options from the server
+            const optionsResp = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username }),
+            });
+
+            if (!optionsResp.ok) {
+                const error = await optionsResp.json();
+                alert(error.error);
+                return;
+            }
+
+            const options = await optionsResp.json();
+
+            // Step 2: Start authentication ceremony
+            const authResp = await SimpleWebAuthnBrowser.startAuthentication(options);
+
+            // Step 3: Send assertion response to the server for verification
+            const verificationResp = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ response: authResp, username }),
+            });
+
+            if (verificationResp.ok) {
+                window.location.href = '/account';
+            } else {
+                const error = await verificationResp.json();
+                alert(error.error);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Authentication failed');
+        }
+    });
+</script>
+</body>
+</html>
