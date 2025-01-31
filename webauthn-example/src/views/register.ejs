@@ -23,7 +23,7 @@
 
             if (!username) return alert('Username is required!');
 
-            submitButton.disabled = true; // Prevent duplicate requests
+            submitButton.disabled = true;
 
             try {
                 const challengeResponse = await fetch('/auth/register/challenge', {
@@ -39,7 +39,9 @@
 
                 const options = await challengeResponse.json();
                 options.challenge = base64URLToArrayBuffer(options.challenge);
-                options.user.id = base64URLToArrayBuffer(options.user.id);
+                if (options.user && options.user.id) {
+                    options.user.id = base64URLToArrayBuffer(options.user.id);
+                }
 
                 if (options.excludeCredentials) {
                     options.excludeCredentials = options.excludeCredentials.map(cred => ({
@@ -49,7 +51,6 @@
                 }
 
                 const credential = await navigator.credentials.create({ publicKey: options });
-
                 if (!credential) throw new Error('Failed to create credential');
 
                 const registrationResponse = {

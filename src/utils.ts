@@ -1,7 +1,3 @@
-// utils.ts
-
-export type Base64URLString = string;
-
 export function bufferToBase64URL(
   input: ArrayBuffer | Buffer | string,
 ): string {

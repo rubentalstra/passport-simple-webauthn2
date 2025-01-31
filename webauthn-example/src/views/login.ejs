@@ -43,7 +43,6 @@
                 }
 
                 const credential = await navigator.credentials.get({ publicKey: options });
-
                 if (!credential) throw new Error('Failed to get credential');
 
                 const authenticationResponse = {

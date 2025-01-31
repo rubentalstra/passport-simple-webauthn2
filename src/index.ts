@@ -65,9 +65,9 @@ export class WebAuthnStrategy extends PassportStrategy {
       userID: Buffer.from(user.userID, "utf-8"),
       userName: user.username,
       attestationType: "none",
-      // Use stored passkey IDs directly (no extra conversion)
+      // Exclude already registered credentials.
       excludeCredentials: user.passkeys.map((cred) => ({
-        id: cred.id,
+        id: cred.id, // stored as a base64url string
         type: "public-key",
         transports: cred.transports || ["internal", "usb", "ble", "nfc"],
       })),
@@ -78,7 +78,7 @@ export class WebAuthnStrategy extends PassportStrategy {
       },
     });
 
-    // Save the challenge (convert it because it is an ArrayBuffer)
+    // Save the challenge (converted to a base64url string)
     await this.challengeStore.save(
       user.userID,
       bufferToBase64URL(options.challenge),
@@ -115,10 +115,10 @@ export class WebAuthnStrategy extends PassportStrategy {
       const { publicKey, id, counter, transports } =
         verification.registrationInfo.credential;
 
-      // Convert id to base64url and publicKey to Uint8Array
+      // Store id as a base64url string and the public key as a Buffer.
       user.passkeys.push({
         id: bufferToBase64URL(id),
-        publicKey: new Uint8Array(publicKey),
+        publicKey: Buffer.from(publicKey),
         counter,
         transports,
       });
@@ -146,7 +146,6 @@ export class WebAuthnStrategy extends PassportStrategy {
     const options = await generateAuthenticationOptions({
       rpID: this.rpID,
       userVerification: "required",
-      // Convert credential IDs to base64url strings
       allowCredentials:
         platformCredentials.length > 0
           ? platformCredentials.map((cred) => ({
@@ -175,7 +174,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     const challenge = await this.challengeStore.get(user.userID);
     if (!challenge) throw new Error("Challenge not found");
 
-    // Compare the received credential.id directly
+    // Find the registered passkey by comparing credential ids.
     const passkey = user.passkeys.find((p) => p.id === credential.id);
     if (!passkey) throw new Error("Passkey not found");
 
@@ -183,11 +182,14 @@ export class WebAuthnStrategy extends PassportStrategy {
       const verification = await verifyAuthenticationResponse({
         response: credential,
         expectedChallenge: challenge,
-        expectedOrigin: `https://${this.rpID}`,
+        expectedOrigin:
+          process.env.NODE_ENV === "development"
+            ? "http://localhost"
+            : `https://${this.rpID}`,
         expectedRPID: this.rpID,
         credential: {
           id: passkey.id,
-          publicKey: passkey.publicKey,
+          publicKey: Buffer.from(passkey.publicKey), // Ensure this is a Buffer
           counter: passkey.counter,
           transports: passkey.transports,
         },
@@ -198,11 +200,10 @@ export class WebAuthnStrategy extends PassportStrategy {
 
       if (!verification.verified) throw new Error("Verification failed");
 
-      // Update the counter
+      // Update the passkey counter.
       passkey.counter = verification.authenticationInfo.newCounter;
       await this.userStore.save(user);
 
-      // Return the authenticated user
       return user;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : "Login failed");
