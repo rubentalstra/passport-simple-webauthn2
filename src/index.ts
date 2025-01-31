@@ -18,6 +18,8 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server/esm/types";
 
+export { ChallengeStore, WebAuthnUser, UserStore };
+
 export class WebAuthnStrategy extends PassportStrategy {
   name = "webauthn";
   private readonly rpID: string;
@@ -45,7 +47,10 @@ export class WebAuthnStrategy extends PassportStrategy {
     return this.userStore.get(identifier, byID);
   }
 
-  async registerChallenge(req: Request, username: string): Promise<any> {
+  async registerChallenge(
+    req: Request,
+    username: string,
+  ): Promise<Record<string, unknown>> {
     if (!username) throw new Error("Username required");
 
     let user = await this.getUser(username);
@@ -116,13 +121,15 @@ export class WebAuthnStrategy extends PassportStrategy {
 
       await this.userStore.save(user);
       return user;
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
+    } catch {
       throw new Error("Registration failed");
     }
   }
 
-  async loginChallenge(req: Request, username: string): Promise<any> {
+  async loginChallenge(
+    req: Request,
+    username: string,
+  ): Promise<Record<string, unknown>> {
     const user = await this.getUser(username);
     if (!user) throw new Error("User not found");
 

@@ -3,15 +3,32 @@ import type { ChallengeStore } from "passport-simple-webauthn2";
 
 export class MongoChallengeStore implements ChallengeStore {
     async get(userID: string): Promise<string | undefined> {
-        const challenge = await Challenge.findOne({ userID }).exec();
-        return challenge?.challenge;
+        try {
+            const challenge = await Challenge.findOne({ userID }).lean().exec();
+            return challenge?.challenge;
+        } catch (error) {
+            console.error(`Error fetching challenge for userID ${userID}:`, error);
+            return undefined;
+        }
     }
 
     async save(userID: string, challenge: string): Promise<void> {
-        await Challenge.findOneAndUpdate({ userID }, { challenge }, { upsert: true, new: true });
+        try {
+            await Challenge.findOneAndUpdate(
+                { userID },
+                { challenge },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            ).exec();
+        } catch (error) {
+            console.error(`Error saving challenge for userID ${userID}:`, error);
+        }
     }
 
     async delete(userID: string): Promise<void> {
-        await Challenge.deleteOne({ userID }).exec();
+        try {
+            await Challenge.deleteOne({ userID }).exec();
+        } catch (error) {
+            console.error(`Error deleting challenge for userID ${userID}:`, error);
+        }
     }
 }
