@@ -1,7 +1,7 @@
 // tests/unit/strategy/verifyAuthentication.test.ts
 
 import { verifyAuthentication } from '../../../src/strategy/verifyAuthentication';
-import { getChallenge, clearChallenge } from '../../../src/strategy/challengeStore';
+import { getChallenge, clearChallenge } from '../../../src/challengeStore';
 import { Passkey } from '../../../src/types';
 import {
     AuthenticationResponseJSON,
@@ -10,7 +10,7 @@ import {
 } from "@simplewebauthn/server";
 
 // Mock the challengeStore and verifyAuthenticationResponse
-jest.mock('../../../src/strategy/challengeStore', () => ({
+jest.mock('../../../src/challengeStore', () => ({
     getChallenge: jest.fn(),
     clearChallenge: jest.fn(),
 }));
@@ -23,10 +23,10 @@ describe('verifyAuthentication', () => {
     const mockPasskey: Passkey = {
         id: 'credential123',
         publicKey: new Uint8Array([1, 2, 3]),
-        counter: 10,
-        webauthnUserID: 'user123',
-        transports: ['usb'],
         user: { id: 'user123', username: 'testuser' },
+        webauthnUserID: 'user123', // Should be Base64URLString
+        counter: 10,
+        transports: ['usb'],
     };
 
     const mockVerifiedResponse: VerifiedAuthenticationResponse = {
@@ -53,8 +53,12 @@ describe('verifyAuthentication', () => {
             userHandle: 'userHandle123',
         },
         type: 'public-key',
-        authenticatorAttachment: 'platform',
-        clientExtensionResults: {},
+        authenticatorAttachment: 'platform', // Filled with a realistic value
+        clientExtensionResults: { // Filled with realistic mock extension data
+            appid: true,
+            credProps: { rk: true },
+            hmacCreateSecret: false,
+        },
     };
 
     it('should verify authentication and update the passkey counter', async () => {
@@ -103,10 +107,12 @@ describe('verifyAuthentication', () => {
     });
 
     it('should throw an error if verification fails', async () => {
+        // Arrange
         (getChallenge as jest.Mock).mockResolvedValue('challenge123');
         (verifyAuthenticationResponse as jest.Mock).mockResolvedValue({ verified: false } as VerifiedAuthenticationResponse);
         const findPasskey = jest.fn().mockResolvedValue(mockPasskey);
 
+        // Act & Assert
         await expect(verifyAuthentication(mockResponse, findPasskey, jest.fn())).rejects.toThrow('Authentication failed');
     });
 });

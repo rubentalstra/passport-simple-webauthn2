@@ -10,7 +10,8 @@ import {
     AuthenticationResponseJSON
 } from '@simplewebauthn/server';
 import { Request } from 'express';
-import { getChallenge, clearChallenge } from '../../../src/strategy/challengeStore';
+import { getChallenge, clearChallenge } from '../../../src/challengeStore';
+import { Passkey, UserModel } from '../../../src/types';
 
 // Mock dependencies
 jest.mock('@simplewebauthn/server', () => ({
@@ -18,21 +19,21 @@ jest.mock('@simplewebauthn/server', () => ({
     verifyRegistrationResponse: jest.fn(),
 }));
 
-jest.mock('../../../src/strategy/challengeStore', () => ({
+jest.mock('../../../src/challengeStore', () => ({
     getChallenge: jest.fn(),
     clearChallenge: jest.fn(),
 }));
 
 describe('SimpleWebAuthnStrategy', () => {
     let strategy: SimpleWebAuthnStrategy;
-    const mockUser = { id: 'user123', username: 'testuser' };
-    const mockPasskey = {
+    const mockUser: UserModel = { id: 'user123', username: 'testuser' };
+    const mockPasskey: Passkey = {
         id: 'credential123',
         publicKey: new Uint8Array([1, 2, 3]),
-        counter: 10,
-        webauthnUserID: 'user123',
-        transports: ['usb'],
         user: mockUser,
+        webauthnUserID: 'user123', // Should be Base64URLString
+        counter: 10,
+        transports: ['usb'],
     };
 
     const mockAuthenticationResponse: AuthenticationResponseJSON = {
@@ -127,7 +128,7 @@ describe('SimpleWebAuthnStrategy', () => {
             expectedRPID: 'example.com',
             credential: {
                 id: mockPasskey.id,
-                publicKey: mockPasskey.publicKey,
+                publicKey: mockPasskey.publicKey, // Uint8Array
                 counter: mockPasskey.counter,
                 transports: ['usb'],
             },
@@ -135,7 +136,7 @@ describe('SimpleWebAuthnStrategy', () => {
         }));
         expect((strategy as any).updatePasskeyCounter).toHaveBeenCalledWith(mockPasskey.id, 11);
         expect(clearChallenge).toHaveBeenCalledWith(mockPasskey.id);
-        expect(success).toHaveBeenCalledWith(mockUser);
+        expect(success).toHaveBeenCalledWith(mockPasskey.webauthnUserID);
         expect(fail).not.toHaveBeenCalled();
         expect(error).not.toHaveBeenCalled();
     });
@@ -150,13 +151,13 @@ describe('SimpleWebAuthnStrategy', () => {
                 credential: {
                     id: 'credential123',
                     publicKey: new Uint8Array([1, 2, 3]),
-                    counter: 0, // Added counter
-                    transports: ['usb'], // Added transports
+                    counter: 0,
+                    transports: ['usb'],
                 },
                 credentialType: 'public-key',
                 attestationObject: new Uint8Array([4, 5, 6]),
                 userVerified: true,
-                credentialDeviceType: 'singleDevice', // Changed to match received value
+                credentialDeviceType: 'singleDevice',
                 credentialBackedUp: false,
                 origin: 'https://example.com',
                 rpID: 'example.com',
@@ -195,19 +196,15 @@ describe('SimpleWebAuthnStrategy', () => {
             requireUserVerification: true,
         }));
         expect((strategy as any).registerPasskey).toHaveBeenCalledWith(
-            expect.objectContaining({
-                id: 'user123',
-                username: 'testuser',
-            }),
+            mockUser,
             expect.objectContaining({
                 id: 'credential123',
                 publicKey: expect.any(Uint8Array),
                 counter: 0,
-                webauthnUserID: 'user123',
+                webauthnUserID: mockUser.id,
                 transports: ['usb'],
                 deviceType: 'singleDevice',
                 backedUp: false,
-                user: expect.any(Object), // Or more specific if needed
             })
         );
         expect(clearChallenge).toHaveBeenCalledWith(mockPasskey.id);

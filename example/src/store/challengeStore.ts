@@ -14,7 +14,7 @@ const challengeStore = new Map<string, ChallengeEntry>();
 export const saveChallenge = async (
   userId: string,
   challenge: string,
-  ttl = 300000,
+  ttl = 300000, // 5 minutes
 ): Promise<void> => {
   challengeStore.set(userId, { challenge, expiresAt: Date.now() + ttl });
   setTimeout(() => challengeStore.delete(userId), ttl);

@@ -5,7 +5,7 @@ import type {
   VerifiedAuthenticationResponse,
 } from "@simplewebauthn/server";
 import { verifyAuthenticationResponse } from "@simplewebauthn/server";
-import { getChallenge, clearChallenge } from "./challengeStore";
+import { getChallenge, clearChallenge } from "../challengeStore";
 import type { Passkey } from "../types";
 
 /**

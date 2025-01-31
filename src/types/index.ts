@@ -1,34 +1,27 @@
+// types/index.ts
+
 import type {
   AuthenticatorTransportFuture,
   CredentialDeviceType,
+  Base64URLString,
 } from "@simplewebauthn/server";
 
-/**
- * Represents a user in the system.
- */
 export interface UserModel {
   id: string;
   username: string;
-  // Add other user-related fields as necessary
 }
 
-/**
- * Represents a WebAuthn passkey.
- */
 export interface Passkey {
-  id: string;
+  id: Base64URLString;
   publicKey: Uint8Array;
+  user: UserModel;
+  webauthnUserID: Base64URLString;
   counter: number;
-  webauthnUserID: string;
-  transports?: AuthenticatorTransportFuture[];
   deviceType?: CredentialDeviceType;
   backedUp?: boolean;
-  user: UserModel;
+  transports?: AuthenticatorTransportFuture[] | undefined;
 }
 
-/**
- * Options required to initialize the SimpleWebAuthnStrategy.
- */
 export interface SimpleWebAuthnStrategyOptions {
   findPasskeyByCredentialID: (credentialID: string) => Promise<Passkey | null>;
   updatePasskeyCounter: (

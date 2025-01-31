@@ -1,3 +1,5 @@
+// strategy/simpleWebAuthnStrategy.ts
+
 import { Strategy } from "passport-strategy";
 import type { Request } from "express";
 import type {
@@ -8,7 +10,7 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import { getChallenge, clearChallenge } from "./challengeStore";
+import { getChallenge, clearChallenge } from "../challengeStore";
 import type { SimpleWebAuthnStrategyOptions, Passkey } from "../types";
 
 /**
@@ -30,7 +32,12 @@ export class SimpleWebAuthnStrategy extends Strategy {
     this.registerPasskey = options.registerPasskey;
   }
 
-  authenticate(req: Request): void {
+  /**
+   * Authenticate method adhering to Passport's Strategy interface.
+   * @param req - Express request object
+   * @param options - Optional parameters
+   */
+  authenticate(req: Request, options?: any): void {
     const action = req.path.split("/").pop();
     if (action === "login") {
       this.handleAuthentication(req);
@@ -83,7 +90,7 @@ export class SimpleWebAuthnStrategy extends Strategy {
       );
       await clearChallenge(response.id);
 
-      this.success(passkey.user);
+      this.success(passkey.webauthnUserID);
     } catch (error) {
       this.error(
         error instanceof Error ? error : new Error("An unknown error occurred"),
@@ -135,15 +142,14 @@ export class SimpleWebAuthnStrategy extends Strategy {
       const newPasskey: Passkey = {
         id: verification.registrationInfo.credential.id,
         publicKey: verification.registrationInfo.credential.publicKey, // Uint8Array
+        user: user,
         counter: verification.registrationInfo.credential.counter,
         webauthnUserID: user.id,
         transports: verification.registrationInfo.credential.transports ?? [],
         deviceType: verification.registrationInfo.credentialDeviceType,
         backedUp: verification.registrationInfo.credentialBackedUp,
-        user,
       };
 
-      // Corrected to pass only newPasskey
       await this.registerPasskey(user, newPasskey);
       await clearChallenge(response.id);
 

@@ -147,7 +147,7 @@ Implement routes to handle user registration (i.e., registering new WebAuthn cre
 ```typescript
 // src/routes/register.ts
 import express, { Request, Response } from "express";
-import { generateRegistration, verifyRegistration } from "passport-simple-webauthn2";
+import { generateRegistration, registration } from "passport-simple-webauthn2";
 import type { RegistrationUser } from "passport-simple-webauthn2";
 
 const router = express.Router();
@@ -184,7 +184,7 @@ router.post("/register/response", async (req: Request, res: Response) => {
   }
 
   try {
-    const verification = await verifyRegistration(req, user, response);
+    const verification = await registration(req, user, response);
 
     if (verification.verified) {
       // Save the credential to your database
@@ -329,7 +329,7 @@ Generates registration options for a new WebAuthn credential.
 
 - **Returns:** Registration options compatible with WebAuthn clients.
 
-#### `verifyRegistration(req: Request, user: RegistrationUser, response: RegistrationResponseJSON): Promise<VerifiedRegistrationResponse>`
+#### `registration(req: Request, user: RegistrationUser, response: RegistrationResponseJSON): Promise<VerifiedRegistrationResponse>`
 
 Verifies the registration response from the client.
 

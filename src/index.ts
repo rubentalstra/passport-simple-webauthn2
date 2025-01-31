@@ -6,21 +6,8 @@
  * challenge store management functions, and type definitions.
  */
 
-export { SimpleWebAuthnStrategy } from "./strategy/simpleWebAuthnStrategy";
-export {
-  generateRegistration,
-  verifyRegistration,
-} from "./strategy/verifyRegistration";
-export { verifyAuthentication } from "./strategy/verifyAuthentication";
-export {
-  saveChallenge,
-  getChallenge,
-  clearChallenge,
-  resetChallengeStore,
-} from "./strategy/challengeStore";
-
-export type {
-  UserModel,
-  Passkey,
-  SimpleWebAuthnStrategyOptions,
-} from "./types";
+export * from "./types";
+export * from "./strategy/simpleWebAuthnStrategy";
+export * from "./auth/registration";
+export * from "./strategy/verifyAuthentication";
+export * from "./challengeStore";

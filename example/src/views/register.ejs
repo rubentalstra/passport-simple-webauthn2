@@ -1,64 +1,64 @@
-<!-- src/views/register.ejs -->
-
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Register - Passport WebAuthn2</title>
-    <script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@latest/dist/simplewebauthn-browser.min.js"></script>
-</head>
-<body>
+<% layout('layout') -%>
 <h1>Register</h1>
 <form id="register-form">
     <label for="username">Username:</label>
     <input type="text" id="username" name="username" required />
     <button type="submit">Register</button>
 </form>
-
 <script>
-    const form = document.getElementById('register-form');
-
-    form.addEventListener('submit', async (e) => {
+    const registerForm = document.getElementById('register-form');
+    registerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-
         const username = document.getElementById('username').value;
 
-        try {
-            // Step 1: Request registration options from the server
-            const optionsResp = await fetch('/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username }),
-            });
+        // Step 1: Create User
+        const res1 = await fetch('/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username }),
+        });
 
-            if (!optionsResp.ok) {
-                const error = await optionsResp.json();
-                alert(error.error);
-                return;
-            }
+        const options = await res1.json();
 
-            const options = await optionsResp.json();
+        // Step 2: Create Credential
+        const credential = await navigator.credentials.create({
+            publicKey: options,
+        });
 
-            // Step 2: Start registration ceremony
-            const attResp = await SimpleWebAuthnBrowser.startRegistration(options);
+        // Convert ArrayBuffers to strings
+        const attestationObject = bufferToBase64Url(credential.response.attestationObject);
+        const clientDataJSON = bufferToBase64Url(credential.response.clientDataJSON);
 
-            // Step 3: Send attestation response to the server for verification
-            const verificationResp = await fetch('/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ response: attResp, username }),
-            });
+        // Step 3: Send Credential to Server
+        const res2 = await fetch('/register/callback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username,
+                response: {
+                    id: credential.id,
+                    rawId: bufferToBase64Url(credential.rawId),
+                    response: {
+                        attestationObject,
+                        clientDataJSON,
+                    },
+                    type: credential.type,
+                    // Include any extensions if used
+                },
+            }),
+        });
 
-            if (verificationResp.ok) {
-                window.location.href = '/account';
-            } else {
-                const error = await verificationResp.json();
-                alert(error.error);
-            }
-        } catch (error) {
-            console.error(error);
-            alert('Registration failed');
+        if (res2.ok) {
+            alert('Registration successful!');
+            window.location.href = '/login';
+        } else {
+            const error = await res2.text();
+            alert('Registration failed: ' + error);
         }
     });
+
+    function bufferToBase64Url(buffer) {
+        return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
 </script>
-</body>
-</html>

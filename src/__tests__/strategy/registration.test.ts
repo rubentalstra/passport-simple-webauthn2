@@ -1,12 +1,12 @@
-// tests/unit/strategy/generateRegistration.test.ts
+// tests/unit/auth/registration.test.ts
 
-import { generateRegistration } from '../../../src/strategy/verifyRegistration';
-import { saveChallenge } from '../../../src/strategy/challengeStore';
-import { UserModel } from '../../types';
-import * as SimpleWebAuthnServer from '@simplewebauthn/server'; // Import as namespace
+import { generateRegistration } from '../../../src/auth/registration';
+import { saveChallenge } from '../../../src/challengeStore';
+import { UserModel } from '../../../src/types';
+import * as SimpleWebAuthnServer from '@simplewebauthn/server';
 
 // Mock the challengeStore functions
-jest.mock('../../../src/strategy/challengeStore', () => ({
+jest.mock('../../../src/challengeStore', () => ({
     saveChallenge: jest.fn(),
 }));
 
@@ -22,7 +22,6 @@ describe('generateRegistration', () => {
     const mockUser: UserModel = {
         id: 'user123',
         username: 'testuser',
-        // Add other fields if necessary
     };
 
     it('should generate registration options and save the challenge', async () => {

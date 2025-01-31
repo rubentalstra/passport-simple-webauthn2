@@ -1,3 +1,5 @@
+// registration.ts
+
 import type {
   RegistrationResponseJSON,
   VerifiedRegistrationResponse,
@@ -7,7 +9,7 @@ import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import { saveChallenge, getChallenge, clearChallenge } from "./challengeStore";
+import { saveChallenge, getChallenge, clearChallenge } from "../challengeStore";
 import type { UserModel, Passkey } from "../types";
 
 /**
@@ -51,7 +53,7 @@ export const generateRegistration = async (
  * @param registerPasskey - Function to store the new passkey in the database.
  * @returns A promise that resolves to the verified registration response.
  */
-export const verifyRegistration = async (
+export const registration = async (
   response: RegistrationResponseJSON,
   findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>,
   registerPasskey: (user: UserModel, passkey: Passkey) => Promise<void>,
@@ -93,15 +95,15 @@ export const verifyRegistration = async (
     const passkey: Passkey = {
       id: verification.registrationInfo.credential.id,
       publicKey: verification.registrationInfo.credential.publicKey,
+      user: user,
       counter: verification.registrationInfo.credential.counter,
       webauthnUserID,
       transports: verification.registrationInfo.credential.transports ?? [],
       deviceType: verification.registrationInfo.credentialDeviceType,
       backedUp: verification.registrationInfo.credentialBackedUp,
-      user,
     };
 
-    // Corrected to pass only newPasskey
+    // Corrected to pass only passkey
     await registerPasskey(user, passkey);
     await clearChallenge(response.id);
 
