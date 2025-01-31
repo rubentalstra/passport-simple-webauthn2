@@ -4,23 +4,12 @@ import type {
   VerifiedAuthenticationResponse,
   VerifiedRegistrationResponse,
 } from "@simplewebauthn/server";
-import { verifyAuthenticationResponse } from "@simplewebauthn/server";
-import { verifyRegistrationResponse } from "@simplewebauthn/server";
+import {
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} from "@simplewebauthn/server";
 import { getChallenge, clearChallenge } from "./challengeStore";
-import type { UserModel, Passkey } from "../models/types";
-
-/**
- * Options for the SimpleWebAuthnStrategy.
- */
-interface SimpleWebAuthnStrategyOptions {
-  findPasskeyByCredentialID: (credentialID: string) => Promise<Passkey | null>;
-  updatePasskeyCounter: (
-    credentialID: string,
-    newCounter: number,
-  ) => Promise<void>;
-  findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>;
-  registerPasskey: (user: UserModel, passkey: Passkey) => Promise<void>;
-}
+import type { SimpleWebAuthnStrategyOptions, Passkey } from "../types";
 
 /**
  * Passport strategy for WebAuthn authentication.
@@ -55,15 +44,19 @@ export class SimpleWebAuthnStrategy extends Strategy {
   private async handleAuthentication(req: Request): Promise<void> {
     try {
       const { response } = req.body;
-      if (!response)
+      if (!response) {
         return this.fail({ message: "Missing response data" }, 400);
+      }
 
       const storedChallenge = await getChallenge(response.id);
-      if (!storedChallenge)
+      if (!storedChallenge) {
         return this.fail({ message: "Challenge expired or missing" }, 403);
+      }
 
       const passkey = await this.findPasskeyByCredentialID(response.id);
-      if (!passkey) return this.fail({ message: "Credential not found" }, 404);
+      if (!passkey) {
+        return this.fail({ message: "Credential not found" }, 404);
+      }
 
       const verification: VerifiedAuthenticationResponse =
         await verifyAuthenticationResponse({
@@ -73,15 +66,16 @@ export class SimpleWebAuthnStrategy extends Strategy {
           expectedRPID: process.env.RP_ID || "example.com",
           credential: {
             id: passkey.id,
-            publicKey: passkey.publicKey,
+            publicKey: passkey.publicKey, // Uint8Array
             counter: passkey.counter,
             transports: passkey.transports ?? [],
           },
           requireUserVerification: true,
         });
 
-      if (!verification.verified)
+      if (!verification.verified) {
         return this.fail({ message: "Verification failed" }, 403);
+      }
 
       await this.updatePasskeyCounter(
         passkey.id,
@@ -100,12 +94,14 @@ export class SimpleWebAuthnStrategy extends Strategy {
   private async handleRegistration(req: Request): Promise<void> {
     try {
       const { response } = req.body;
-      if (!response)
+      if (!response) {
         return this.fail({ message: "Missing response data" }, 400);
+      }
 
       const storedChallenge = await getChallenge(response.id);
-      if (!storedChallenge)
+      if (!storedChallenge) {
         return this.fail({ message: "Challenge expired or missing" }, 403);
+      }
 
       const verification: VerifiedRegistrationResponse =
         await verifyRegistrationResponse({
@@ -120,14 +116,25 @@ export class SimpleWebAuthnStrategy extends Strategy {
         return this.fail({ message: "Registration verification failed" }, 403);
       }
 
-      const user = await this.findUserByWebAuthnID(
-        verification.registrationInfo.credential.id,
-      );
-      if (!user) return this.fail({ message: "User not found" }, 404);
+      const webauthnUserID = response.id;
+      if (!webauthnUserID) {
+        return this.fail(
+          {
+            message:
+              "User handle (WebAuthn user ID) missing in registration response",
+          },
+          400,
+        );
+      }
+
+      const user = await this.findUserByWebAuthnID(webauthnUserID);
+      if (!user) {
+        return this.fail({ message: "User not found" }, 404);
+      }
 
       const newPasskey: Passkey = {
         id: verification.registrationInfo.credential.id,
-        publicKey: verification.registrationInfo.credential.publicKey,
+        publicKey: verification.registrationInfo.credential.publicKey, // Uint8Array
         counter: verification.registrationInfo.credential.counter,
         webauthnUserID: user.id,
         transports: verification.registrationInfo.credential.transports ?? [],
@@ -136,7 +143,8 @@ export class SimpleWebAuthnStrategy extends Strategy {
         user,
       };
 
-      await this.registerPasskey(user, newPasskey);
+      // Corrected to pass only newPasskey
+      await this.registerPasskey(newPasskey);
       await clearChallenge(response.id);
 
       this.success(user);

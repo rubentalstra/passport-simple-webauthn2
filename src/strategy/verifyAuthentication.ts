@@ -1,10 +1,12 @@
+// strategy/verifyAuthentication.ts
+
 import type {
   AuthenticationResponseJSON,
   VerifiedAuthenticationResponse,
 } from "@simplewebauthn/server";
 import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { getChallenge, clearChallenge } from "./challengeStore";
-import type { Passkey } from "../models/types";
+import type { Passkey } from "../types";
 
 /**
  * Verifies the authentication response from the client.
@@ -23,51 +25,46 @@ export const verifyAuthentication = async (
 ): Promise<VerifiedAuthenticationResponse> => {
   try {
     if (!response || !response.id) {
-      new Error("Invalid authentication response");
+      throw new Error("Invalid authentication response");
     }
 
-    // Retrieve stored challenge
     const storedChallenge = await getChallenge(response.id);
     if (!storedChallenge) {
-      new Error("Challenge expired or missing");
+      throw new Error("Challenge expired or missing");
     }
 
-    // Retrieve passkey using provided callback function
     const passkey: Passkey | null = await findPasskey(response.id);
     if (!passkey) {
-      new Error("Passkey not found or does not exist");
+      throw new Error("Passkey not found or does not exist");
     }
 
-    // Perform authentication verification
     const verification = await verifyAuthenticationResponse({
       response,
-      expectedChallenge: storedChallenge!,
+      expectedChallenge: storedChallenge,
       expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
       expectedRPID: process.env.RP_ID || "example.com",
       credential: {
-        id: passkey!.id,
-        publicKey: passkey!.publicKey,
-        counter: passkey!.counter,
-        transports: passkey!.transports ?? [],
+        id: passkey.id,
+        publicKey: passkey.publicKey, // Uint8Array
+        counter: passkey.counter,
+        transports: passkey.transports ?? [],
       },
       requireUserVerification: true,
     });
 
     if (!verification.verified) {
-      new Error("Authentication failed");
+      throw new Error("Authentication failed");
     }
 
-    // Prevent replay attacks by updating the stored counter
     await updatePasskeyCounter(
-      passkey!.id,
+      passkey.id,
       verification.authenticationInfo.newCounter,
     );
 
-    // Clear challenge after successful verification
     await clearChallenge(response.id);
 
     return verification;
-  } catch (error) {
+  } catch (error: any) {
     throw new Error(
       error instanceof Error ? error.message : "Unknown authentication error",
     );

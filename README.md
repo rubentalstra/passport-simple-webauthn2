@@ -18,7 +18,7 @@
     - [3. Registration Routes](#3-registration-routes)
     - [4. Authentication Routes](#4-authentication-routes)
 - [API Reference](#api-reference)
-    - [SimpleWebAuthnStrategy](#simplewebauthnstrategy)
+    - [Strategy](#simplewebauthnstrategy)
     - [Utility Functions](#utility-functions)
 - [Type Definitions](#type-definitions)
 - [Contributing](#contributing)
@@ -65,7 +65,7 @@ import express from "express";
 import session from "express-session";
 import passport from "passport";
 import bodyParser from "body-parser";
-import { SimpleWebAuthnStrategy } from "passport-simple-webauthn2";
+import { Strategy } from "passport-simple-webauthn2";
 
 // Initialize Express app
 const app = express();
@@ -105,12 +105,12 @@ export default app;
 
 ### 2. Configuring the Strategy
 
-Set up the `SimpleWebAuthnStrategy` with your user retrieval logic.
+Set up the `Strategy` with your user retrieval logic.
 
 ```typescript
 // src/auth/passport.ts
 import passport from "passport";
-import { SimpleWebAuthnStrategy, SimpleWebAuthnStrategyOptions } from "passport-simple-webauthn2";
+import { Strategy, SimpleWebAuthnStrategyOptions } from "passport-simple-webauthn2";
 import type { Request } from "express";
 
 // Example User Model
@@ -132,7 +132,7 @@ const strategyOptions: SimpleWebAuthnStrategyOptions = {
   getUser,
 };
 
-const webAuthnStrategy = new SimpleWebAuthnStrategy(strategyOptions);
+const webAuthnStrategy = new Strategy(strategyOptions);
 
 // Use the strategy with Passport
 passport.use(webAuthnStrategy);
@@ -295,9 +295,9 @@ app.listen(PORT, () => {
 
 ## API Reference
 
-### SimpleWebAuthnStrategy
+### Strategy
 
-#### `SimpleWebAuthnStrategy(options: SimpleWebAuthnStrategyOptions)`
+#### `Strategy(options: SimpleWebAuthnStrategyOptions)`
 
 Creates an instance of the WebAuthn Passport strategy.
 

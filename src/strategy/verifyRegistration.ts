@@ -8,7 +8,7 @@ import {
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import { saveChallenge, getChallenge, clearChallenge } from "./challengeStore";
-import type { UserModel, Passkey } from "../models/types";
+import type { UserModel, Passkey } from "../types";
 
 /**
  * Generates registration options for a new WebAuthn credential.
@@ -22,21 +22,20 @@ export const generateRegistration = async (
     const options = await generateRegistrationOptions({
       rpName: process.env.RP_NAME || "Example RP",
       rpID: process.env.RP_ID || "example.com",
-      userID: Buffer.from(user.id), // Ensure user ID is passed correctly
+      userID: Buffer.from(user.id),
       userName: user.username,
-      attestationType: "none", // For smoother UX
+      attestationType: "none",
       authenticatorSelection: {
         residentKey: "preferred",
         userVerification: "preferred",
-        authenticatorAttachment: "platform", // Optional
+        authenticatorAttachment: "platform",
       },
-      supportedAlgorithmIDs: [-7, -257, -8], // ES256, RS256, EdDSA
+      supportedAlgorithmIDs: [-7, -257, -8],
     });
 
     await saveChallenge(user.id, options.challenge);
     return options;
   } catch (error: any) {
-    console.error("Error generating registration options:", error);
     throw new Error("Failed to generate registration options");
   }
 };
@@ -75,7 +74,6 @@ export const verifyRegistration = async (
       throw new Error("Registration verification failed");
     }
 
-    // Extract userHandle from the response (Fix TS2339 error)
     const webauthnUserID = response.id;
     if (!webauthnUserID) {
       throw new Error(
@@ -83,13 +81,11 @@ export const verifyRegistration = async (
       );
     }
 
-    // Fetch user from the database
     const user = await findUserByWebAuthnID(webauthnUserID);
     if (!user) {
       throw new Error("User not found");
     }
 
-    // Create new passkey object
     const passkey: Passkey = {
       id: verification.registrationInfo.credential.id,
       publicKey: verification.registrationInfo.credential.publicKey,
@@ -101,13 +97,12 @@ export const verifyRegistration = async (
       user,
     };
 
-    // Store the new passkey in the database
+    // Corrected to pass only newPasskey
     await registerPasskey(passkey);
     await clearChallenge(response.id);
 
     return verification;
-  } catch (error) {
-    console.error("Registration verification error:", error);
+  } catch (error: any) {
     throw new Error(
       error instanceof Error ? error.message : "Unknown registration error",
     );
