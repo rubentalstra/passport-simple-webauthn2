@@ -2,7 +2,7 @@ import { WebAuthnStrategy } from "../index";
 import type { WebAuthnUser, UserStore, ChallengeStore } from "../types";
 import { Request } from "express";
 import { v4 as uuidv4 } from "uuid";
-import {AuthenticationResponseJSON } from "@simplewebauthn/server";
+import {AuthenticationResponseJSON, RegistrationResponseJSON} from "@simplewebauthn/server";
 
 class MockUserStore implements UserStore {
     private users: Record<string, WebAuthnUser> = {};
@@ -59,29 +59,29 @@ describe("WebAuthnStrategy", () => {
         expect(typeof options.challenge).toBe("string");
     });
 
-    // test("should complete registration callback successfully", async () => {
-    //     const req = {} as Request;
-    //     const username = "testuser";
-    //     const userID = uuidv4();
-    //
-    //     await userStore.save({ userID, username, passkeys: [] });
-    //     await challengeStore.save(userID, "mocked-challenge");
-    //
-    //     const credential: RegistrationResponseJSON = {
-    //         id: "test-id",
-    //         rawId: "test-raw-id",
-    //         response: {
-    //             attestationObject: "mocked-attestation-object",
-    //             clientDataJSON: "mocked-client-data-json",
-    //         },
-    //         clientExtensionResults: {},
-    //         type: "public-key",
-    //     };
-    //
-    //     await expect(strategy.registerCallback(req, username, credential)).rejects.toThrow(
-    //         "Registration failed"
-    //     );
-    // });
+    test("should complete registration callback successfully", async () => {
+        const req = {} as Request;
+        const username = "testuser";
+        const userID = uuidv4();
+
+        await userStore.save({ userID, username, passkeys: [] });
+        await challengeStore.save(userID, "mocked-challenge");
+
+        const credential: RegistrationResponseJSON = {
+            id: "test-id",
+            rawId: "test-raw-id",
+            response: {
+                attestationObject: "mocked-attestation-object",
+                clientDataJSON: "mocked-client-data-json",
+            },
+            clientExtensionResults: {},
+            type: "public-key",
+        };
+
+        await expect(strategy.registerCallback(req, username, credential)).rejects.toThrow(
+            "Credential ID was not base64url-encoded"
+        );
+    });
 
     test("should generate authentication challenge", async () => {
         const req = {} as Request;

@@ -112,8 +112,9 @@ export class WebAuthnStrategy extends PassportStrategy {
 
       const { publicKey, id, counter, transports } =
         verification.registrationInfo.credential;
+
       user.passkeys.push({
-        id: bufferToBase64URL(id),
+        id: id,
         publicKey: new Uint8Array(publicKey),
         counter,
         transports,
@@ -170,9 +171,8 @@ export class WebAuthnStrategy extends PassportStrategy {
     const challenge = await this.challengeStore.get(user.userID);
     if (!challenge) throw new Error("Challenge not found");
 
-    const passkey = user.passkeys.find(
-      (p) => p.id === bufferToBase64URL(credential.id),
-    );
+    // IMPORTANT: Compare the received credential.id directly (it is already Base64URL encoded)
+    const passkey = user.passkeys.find((p) => p.id === credential.id);
     if (!passkey) throw new Error("Passkey not found");
 
     try {
@@ -194,8 +194,11 @@ export class WebAuthnStrategy extends PassportStrategy {
 
       if (!verification.verified) throw new Error("Verification failed");
 
+      // Update the counter
       passkey.counter = verification.authenticationInfo.newCounter;
       await this.userStore.save(user);
+
+      // Return the authenticated user
       return user;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : "Login failed");

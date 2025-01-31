@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import express, {NextFunction, Request, Response} from "express";
 import passport from "passport";
 import { WebAuthnStrategy } from "passport-simple-webauthn2";
 import { MongoUserStore } from "../stores/MongoUserStore";
@@ -46,12 +46,24 @@ router.post("/login/challenge", async (req: Request, res: Response) => {
     }
 });
 
-router.post("/login/callback", async (req: Request, res: Response) => {
+
+router.post("/login-callback", async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const user = await webAuthnStrategy.loginCallback(req, req.body.username, req.body.credential);
-        res.json({ success: true, user });
-    } catch (err: any) {
-        res.status(400).json({ error: err.message });
+        const { username, credential } = req.body;
+        if (!credential) {
+            throw new Error("Missing credential data");
+        }
+
+        // Verify the login response
+        const user = await webAuthnStrategy.loginCallback(req, username, credential);
+
+        // Establish a Passport session
+        req.login(user, (err) => {
+            if (err) return next(err);
+            res.json({ success: true, user });
+        });
+    } catch (error) {
+        next(error);
     }
 });
 
