@@ -36,7 +36,11 @@ export const generateRegistration = async (
     await saveChallenge(user.id, options.challenge);
     return options;
   } catch (error: any) {
-    throw new Error("Failed to generate registration options");
+    throw new Error(
+      error instanceof Error
+        ? error.message
+        : "Failed to generate registration options",
+    );
   }
 };
 

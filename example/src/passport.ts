@@ -1,6 +1,6 @@
 import passport from "passport";
 import { SimpleWebAuthnStrategy } from "passport-simple-webauthn2";
-import {findUserById, getAllUsers, updateUser} from "./models/user"; // Ensure updateUser is implemented
+import {findUserById, getAllUsers, updateUser} from "./models/User"; // Ensure updateUser is implemented
 
 // Serialize user for session storage
 passport.serializeUser((user: any, done) => {

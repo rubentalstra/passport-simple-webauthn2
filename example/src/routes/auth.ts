@@ -4,7 +4,7 @@ import {
     generateRegistration, UserModel,
     verifyRegistration,
 } from "passport-simple-webauthn2";
-import {findUserByUsername, createUser, findUserById} from "../models/user";
+import {findUserByUsername, createUser, findUserById} from "../models/User";
 import {generateAuthenticationOptions} from "@simplewebauthn/server";
 
 const router = express.Router();
