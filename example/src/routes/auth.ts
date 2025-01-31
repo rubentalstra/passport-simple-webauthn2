@@ -1,4 +1,3 @@
-// router.ts
 import express, { Request, Response } from 'express';
 import session from 'express-session';
 import passport from 'passport';
@@ -7,9 +6,7 @@ import {
     verifyRegistrationResponse,
     generateAuthenticationOptions,
     verifyAuthenticationResponse,
-    RegistrationResponseJSON,
     WebAuthnCredential,
-    AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
 import { v4 as uuidv4 } from 'uuid';
 import { User } from "../types";
@@ -29,29 +26,24 @@ const users: Record<string, User> = {};
 // Session middleware setup
 router.use(
     session({
-        secret: 'your_secret_key', // Replace with a strong secret in production
+        secret: 'your_secret_key',
         resave: false,
         saveUninitialized: false,
         cookie: { secure: true }, // Set to true if using HTTPS
     })
 );
 
-// Initialize Passport (optional, remove if not using Passport elsewhere)
+// Initialize Passport
 router.use(passport.initialize());
 router.use(passport.session());
 
-// Passport serialization (optional, remove if not using Passport)
 passport.serializeUser((user: any, done) => {
     done(null, user.userID);
 });
 
 passport.deserializeUser((userID: string, done) => {
     const user = users[userID];
-    if (user) {
-        done(null, user);
-    } else {
-        done(null, null);
-    }
+    done(null, user || null);
 });
 
 /**
@@ -66,9 +58,7 @@ router.get('/register', (req: Request, res: Response) => {
  */
 router.post('/register-challenge', async (req: Request, res: Response) => {
     const { username } = req.body;
-    if (!username) {
-        return res.status(400).json({ error: 'Username required' });
-    }
+    if (!username) return res.status(400).json({ error: 'Username required' });
 
     let user = Object.values(users).find((u) => u.username === username);
     if (!user) {
@@ -104,15 +94,10 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
  */
 router.post('/register-callback', async (req: Request, res: Response) => {
     const { username, credential } = req.body;
-
-    if (!username || !credential) {
-        return res.status(400).json({ error: 'Invalid data' });
-    }
+    if (!username || !credential) return res.status(400).json({ error: 'Invalid data' });
 
     const user = Object.values(users).find((u) => u.username === username);
-    if (!user || !challenges[user.userID]) {
-        return res.status(400).json({ error: 'Invalid request' });
-    }
+    if (!user || !challenges[user.userID]) return res.status(400).json({ error: 'Invalid request' });
 
     const storedChallenge = challenges[user.userID];
     delete challenges[user.userID];
@@ -143,9 +128,7 @@ router.post('/register-callback', async (req: Request, res: Response) => {
         console.log("Updated user data:", users[user.userID]);
 
         req.login(user, (err) => {
-            if (err) {
-                return res.status(500).json({ error: 'Internal Server Error' });
-            }
+            if (err) return res.status(500).json({ error: 'Internal Server Error' });
             res.json({ success: true });
         });
     } catch (error) {
@@ -165,14 +148,10 @@ router.get('/login', (req: Request, res: Response) => {
  */
 router.post('/login-challenge', async (req: Request, res: Response) => {
     const { username } = req.body;
-    if (!username) {
-        return res.status(400).json({ error: 'Username required' });
-    }
+    if (!username) return res.status(400).json({ error: 'Username required' });
 
     const user = Object.values(users).find((u) => u.username === username);
-    if (!user) {
-        return res.status(400).json({ error: 'User not found' });
-    }
+    if (!user) return res.status(400).json({ error: 'User not found' });
 
     const platformCredentials = user.passkeys.filter(cred => cred.transports?.includes('internal'));
 
@@ -195,15 +174,10 @@ router.post('/login-challenge', async (req: Request, res: Response) => {
  */
 router.post('/login-callback', async (req: Request, res: Response) => {
     const { username, credential } = req.body;
-
-    if (!username || !credential) {
-        return res.status(400).json({ error: 'Invalid data' });
-    }
+    if (!username || !credential) return res.status(400).json({ error: 'Invalid data' });
 
     const user = Object.values(users).find((u) => u.username === username);
-    if (!user || !challenges[user.userID]) {
-        return res.status(400).json({ error: 'Invalid request' });
-    }
+    if (!user || !challenges[user.userID]) return res.status(400).json({ error: 'Invalid request' });
 
     const storedChallenge = challenges[user.userID];
     delete challenges[user.userID];
@@ -211,7 +185,7 @@ router.post('/login-callback', async (req: Request, res: Response) => {
     console.log("Available passkeys for user:", user.passkeys);
     console.log("Credential ID received:", credential.id);
 
-    const passkey = user.passkeys.find((p) => bufferToBase64URL(Buffer.from(p.id, 'base64url').toString('base64url')) === credential.id);
+    const passkey = user.passkeys.find((p) => p.id === bufferToBase64URL(Buffer.from(credential.id, 'base64url').toString('base64url')));
 
     if (!passkey) {
         return res.status(400).json({ error: 'Passkey not found' });
@@ -234,9 +208,7 @@ router.post('/login-callback', async (req: Request, res: Response) => {
         passkey.counter = verification.authenticationInfo.newCounter;
 
         req.login(user, (err) => {
-            if (err) {
-                return res.status(500).json({ error: 'Internal Server Error' });
-            }
+            if (err) return res.status(500).json({ error: 'Internal Server Error' });
             res.json({ success: true });
         });
     } catch (error) {
@@ -249,8 +221,9 @@ router.post('/login-callback', async (req: Request, res: Response) => {
  * Renders the account page for authenticated users.
  */
 router.get('/account', (req: Request, res: Response) => {
-    if (!req.isAuthenticated()) return res.redirect('/login');
-    res.render('account', { user: req.user }); // Ensure you have a view engine set up
+    // if (!req.isAuthenticated()) return res.redirect('/login');
+    const user = Object.values(users).find((u) => u.username === username);
+    res.render('account', { user: user }); // Ensure you have a view engine set up
 });
 
 /**
