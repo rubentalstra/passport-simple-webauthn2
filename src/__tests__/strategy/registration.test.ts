@@ -1,5 +1,4 @@
 import { generateRegistration, verifyRegistration } from '../../../src/auth/registration';
-import { UserModel, Passkey } from '../../../src/types';
 import {
     generateRegistrationOptions,
     verifyRegistrationResponse,
@@ -15,11 +14,6 @@ jest.mock('@simplewebauthn/server', () => ({
 }));
 
 describe('generateRegistration', () => {
-    const mockUser: UserModel = {
-        id: 'user123',
-        username: 'testuser',
-    };
-
     it('should generate registration options', async () => {
         const mockOptions = {
             challenge: 'challenge123',
@@ -28,22 +22,22 @@ describe('generateRegistration', () => {
                 id: 'example.com',
             },
             user: {
-                id: Buffer.from(mockUser.id).toString('base64'),
-                name: mockUser.username,
-                displayName: mockUser.username,
+                id: Buffer.from('user123').toString('base64'), // Ensures base64 encoding
+                name: 'testuser',
+                displayName: 'testuser',
             },
         };
 
         (generateRegistrationOptions as jest.Mock).mockReturnValue(mockOptions);
 
-        const options = await generateRegistration(mockUser);
+        const options = await generateRegistration('user123','testuser');
 
         expect(options).toHaveProperty('challenge', 'challenge123');
         expect(options).toHaveProperty('rp');
         expect(options).toHaveProperty('user');
         expect(options.user).toHaveProperty('id');
 
-        expect(Buffer.from(options.user.id, 'base64').toString('utf8')).toEqual(mockUser.id);
+        expect(Buffer.from(options.user.id, 'base64').toString('utf8')).toEqual('user123');
     });
 
     it('should throw an error if registration options generation fails', async () => {
@@ -51,18 +45,15 @@ describe('generateRegistration', () => {
             throw new Error('Generation failed');
         });
 
-        await expect(generateRegistration(mockUser)).rejects.toThrow("Generation failed");
+        await expect(generateRegistration('user123','testuser')).rejects.toThrow("Generation failed");
     });
 });
 
 describe('verifyRegistration', () => {
-    const mockUser: UserModel = {
-        id: 'user123',
-        username: 'testuser',
-    };
+    const mockUser = { id: 'user123', username: 'testuser' };
 
     const mockResponse: RegistrationResponseJSON = {
-        id: 'credential123', // ✅ WebAuthn user ID should come from response.id
+        id: 'credential123',
         rawId: 'rawId123',
         response: {
             attestationObject: 'attestationObject123',
@@ -102,26 +93,28 @@ describe('verifyRegistration', () => {
     it('should verify registration and save the passkey', async () => {
         (verifyRegistrationResponse as jest.Mock).mockResolvedValue(mockVerifiedResponse);
 
-        const findUserByWebAuthnID = jest.fn().mockResolvedValue(mockUser);
+        const findUserByWebAuthnID = jest.fn().mockResolvedValue('user123');
         const registerPasskey = jest.fn().mockResolvedValue(undefined);
         const expectedChallenge = 'challenge123';
 
         const result = await verifyRegistration(mockResponse, expectedChallenge, findUserByWebAuthnID, registerPasskey);
 
-        // ✅ Ensure the function searches for the correct user using the WebAuthn credential ID
-        expect(findUserByWebAuthnID).toHaveBeenCalledWith(mockResponse.id); // FIXED
+        // Ensure the function searches for the correct user using the WebAuthn credential ID
+        expect(findUserByWebAuthnID).toHaveBeenCalledWith(mockResponse.id);
 
-        // ✅ Ensure passkey registration includes correct WebAuthn user ID
-        expect(registerPasskey).toHaveBeenCalledWith(mockUser, expect.objectContaining({
-            id: 'credential123',
-            publicKey: new Uint8Array([1, 2, 3]),
-            counter: 0,
-            webauthnUserID: "credential123",  // ✅ Ensure we use the correct user ID
-            transports: ['usb'],
-            deviceType: 'singleDevice',
-            backedUp: false,
-            userID: 'user123',  // ✅ Correct user object is included
-        }));
+        // Ensure passkey registration includes correct WebAuthn user ID
+        expect(registerPasskey).toHaveBeenCalledWith(
+            'user123', // Pass only userID
+            expect.objectContaining({
+                id: 'credential123',
+                publicKey: new Uint8Array([1, 2, 3]),
+                counter: 0,
+                webauthnUserID: "credential123",  // Ensure WebAuthn ID is correct
+                transports: ['usb'],
+                deviceType: 'singleDevice',
+                backedUp: false,
+            })
+        );
 
         expect(result).toEqual(mockVerifiedResponse);
     });
@@ -152,7 +145,7 @@ describe('verifyRegistration', () => {
             registrationInfo: {
                 ...mockVerifiedResponse.registrationInfo,
                 credential: {
-                    id: '', // 🔹 FIX: Explicitly check for empty ID
+                    id: '', // Explicitly check for empty ID
                     publicKey: new Uint8Array([1, 2, 3]),
                     counter: 0,
                     transports: ['usb'],
@@ -163,7 +156,7 @@ describe('verifyRegistration', () => {
         const findUserByWebAuthnID = jest.fn().mockResolvedValue(mockUser);
         const registerPasskey = jest.fn();
 
-        // 🔹 FIX: Ensure `verifyRegistration` rejects when credential ID is missing
+        // Ensure `verifyRegistration` rejects when credential ID is missing
         await expect(verifyRegistration(mockResponse, 'challenge123', findUserByWebAuthnID, registerPasskey))
             .rejects.toThrow('User handle (WebAuthn user ID) missing in registration response');
     });

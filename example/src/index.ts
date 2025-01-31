@@ -4,15 +4,16 @@ import passport from 'passport';
 import path from 'path';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
-import { users, passkeys } from './store/store';
+import { users, passkeys, userCredentialMap } from './store/store';
 import { generateAuthenticationOptions } from "@simplewebauthn/server";
-import {clearChallenge, getChallenge, saveChallenge} from "./challengeStore";
+import { clearChallenge, getChallenge, saveChallenge } from "./challengeStore";
 import {
     generateRegistration,
     Passkey,
     SimpleWebAuthnStrategy,
     SimpleWebAuthnStrategyOptions,
-    UserModel, verifyAuthentication, verifyRegistration
+    verifyAuthentication,
+    verifyRegistration
 } from "passport-simple-webauthn2";
 
 // Load environment variables
@@ -39,25 +40,24 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Define Passport Serialization
-passport.serializeUser((user: any, done) => {
-    done(null, user.id);
+passport.serializeUser((userID: string, done) => {
+    done(null, userID);
 });
 
-passport.deserializeUser((id: string, done) => {
-    const user = users.get(id);
-    if (user) {
-        done(null, user);
+passport.deserializeUser((userID: string, done) => {
+    console.log(`🔄 [Deserialize] Looking up user with ID: ${userID}`);
+    if (users.has(userID)) {
+        console.log(`✅ [Deserialize] User found`);
+        done(null, userID);
     } else {
+        console.error(`❌ [Deserialize] User not found for ID: ${userID}`);
         done(new Error('User not found'), null);
     }
 });
 
-// Define Strategy Options
+// WebAuthn Strategy Options
 const strategyOptions: SimpleWebAuthnStrategyOptions = {
-    findPasskeyByCredentialID: async (credentialID: string) => {
-        const decodedCredentialID = Buffer.from(credentialID, 'base64url').toString('utf-8');
-        return passkeys.get(decodedCredentialID) || null;
-    },
+    findPasskeyByCredentialID: async (credentialID: string) => passkeys.get(credentialID) || null,
     updatePasskeyCounter: async (credentialID: string, newCounter: number) => {
         const passkey = passkeys.get(credentialID);
         if (passkey) {
@@ -65,11 +65,13 @@ const strategyOptions: SimpleWebAuthnStrategyOptions = {
             passkeys.set(credentialID, passkey);
         }
     },
-    findUserByWebAuthnID: async (webauthnUserID: string) => {
-        const decodedUserId = Buffer.from(webauthnUserID, 'base64url').toString('utf-8');
-        return users.get(decodedUserId) || null;
+    findUserIDByWebAuthnID: async (webauthnUserID: string) => {
+        return userCredentialMap.get(webauthnUserID) || null;
     },
-    registerPasskey: async (user: UserModel, passkey: Passkey) => passkeys.set(passkey.id, passkey),
+    registerPasskey: async (userID: string, passkey: Passkey) => {
+        passkeys.set(passkey.id, passkey);
+        userCredentialMap.set(passkey.webauthnUserID, userID);
+    },
 };
 
 // Configure Passport to use SimpleWebAuthnStrategy
@@ -90,23 +92,26 @@ app.get('/register', (req, res) => {
 // Registration - Generate Options
 app.post('/register', async (req, res, next) => {
     try {
+        console.log("📩 [Register] Incoming request:", req.body);
         const { username } = req.body;
-        if (!username) return res.status(400).send('Username is required');
+        if (!username) return res.status(400).json({ error: 'Username is required' });
 
         // Generate a base64url-encoded user ID
-        const userId = Buffer.from(username).toString('base64url');
+        const userID = Buffer.from(username).toString('base64url');
+        console.log(`🆕 [Register] Creating user with ID: ${userID}`);
 
-        const user: UserModel = { id: userId, username };
-        users.set(user.id, user);
+        users.set(userID, { id: userID, username });
 
         // Generate WebAuthn registration options
-        const registrationOptions = await generateRegistration(user);
+        const registrationOptions = await generateRegistration(userID, username);
+        console.log("📡 [Register] Registration options generated:", registrationOptions);
 
-        // Save challenge using user.id instead of username
-        await saveChallenge(user.id, registrationOptions.challenge);
+        // Save challenge using user ID
+        await saveChallenge(userID, registrationOptions.challenge);
 
         res.json(registrationOptions);
     } catch (error) {
+        console.error("❌ [Register] Error:", error);
         next(error);
     }
 });
@@ -114,79 +119,78 @@ app.post('/register', async (req, res, next) => {
 // Registration - Callback
 app.post('/register/callback', async (req, res, next) => {
     try {
+        console.log("📩 [Register Callback] Received:", req.body);
         const { response, username } = req.body;
         if (!response || !username) {
             return res.status(400).json({ error: "Invalid registration response" });
         }
 
-        // Retrieve user by ID (since challenges are stored with user ID)
-        const userId = Buffer.from(username).toString('base64url');
-        const expectedChallenge = await getChallenge(userId);
+        const userID = Buffer.from(username).toString('base64url');
+        const expectedChallenge = await getChallenge(userID);
 
         if (!expectedChallenge) {
+            console.error("❌ [Register Callback] Challenge not found for user:", username);
             return res.status(400).json({ error: "Challenge expired or not found" });
         }
-
-        console.log("Received registration callback:", response);
 
         // Verify WebAuthn registration
         const verification = await verifyRegistration(
             response,
             expectedChallenge,
-            strategyOptions.findUserByWebAuthnID,
+            strategyOptions.findUserIDByWebAuthnID,
             strategyOptions.registerPasskey
         );
+
+        console.log("✅ [Register Callback] Verification Result:", verification);
 
         if (!verification.verified) {
             return res.status(400).json({ error: "Verification failed" });
         }
 
-        // Clear the challenge after successful verification
-        await clearChallenge(userId);
+        await clearChallenge(userID);
         res.json({ success: true, message: "Registration successful" });
     } catch (error) {
-        console.error("Error during registration callback:", error);
+        console.error("❌ [Register Callback] Error:", error);
         res.status(500).json({ error: "Server error during registration" });
     }
 });
 
-// Login Page
-app.get('/login', (req, res) => {
-    res.render('login');
-});
-
 // Login - Generate Options
 app.post('/login/options', async (req, res) => {
-    const { username } = req.body;
-    const user = Array.from(users.values()).find(u => u.username === username);
+    try {
+        const { username } = req.body;
+        const userID = Buffer.from(username).toString('base64url');
 
-    if (!user) return res.status(400).json({ error: "User not found" });
+        if (!users.has(userID)) return res.status(400).json({ error: "User not found" });
 
-    // Generate authentication options
-    const options = await generateAuthenticationOptions({
-        rpID: process.env.RP_ID || 'default-rp-id',
-        allowCredentials: Array.from(passkeys.values())
-            .filter(pk => pk.user.id === user.id)
-            .map(pk => ({ id: pk.id })),
-    });
+        // Generate authentication options
+        const options = await generateAuthenticationOptions({
+            rpID: process.env.RP_ID || 'default-rp-id',
+            allowCredentials: Array.from(passkeys.values())
+                .filter(pk => pk.userID === userID)
+                .map(pk => ({ id: pk.id })),
+        });
 
-    // Save challenge using user.id instead of username
-    await saveChallenge(user.id, options.challenge);
-    res.json(options);
+        await saveChallenge(userID, options.challenge);
+        res.json(options);
+    } catch (error) {
+        console.error("❌ [Login Options] Error:", error);
+        res.status(500).json({ error: "Failed to generate login options" });
+    }
 });
 
 // Login - Authentication
 app.post('/login', async (req, res, next) => {
     try {
+        console.log("📩 [Login] Incoming request:", req.body);
         const { username, response } = req.body;
         if (!username || !response) return res.status(400).send("Missing username or response");
 
-        // Retrieve user ID from username
-        const userId = Buffer.from(username).toString('base64url');
+        const userID = Buffer.from(username).toString('base64url');
+        const expectedChallenge = await getChallenge(userID);
 
-        // Retrieve challenge using user ID
-        const expectedChallenge = await getChallenge(userId);
         if (!expectedChallenge) {
+            console.error("❌ [Login] Challenge not found for user:", username);
             return res.status(400).send("Challenge expired or not found");
         }
 
@@ -198,41 +202,20 @@ app.post('/login', async (req, res, next) => {
             strategyOptions.updatePasskeyCounter
         );
 
+        console.log("✅ [Login] Verification Result:", verification);
+
         if (!verification.verified) {
             return res.status(400).json({ error: "Authentication failed" });
         }
 
-        await clearChallenge(userId);
+        await clearChallenge(userID);
         res.redirect('/dashboard');
     } catch (error) {
+        console.error("❌ [Login] Error:", error);
         next(error);
     }
 });
 
-// Protected Dashboard Route
-app.get('/dashboard', isAuthenticated, (req, res) => {
-    res.render('dashboard', { user: req.user });
-});
-
-// Logout Route
-app.get('/logout', (req, res) => {
-    req.logout(() => {
-        res.redirect('/');
-    });
-});
-
-// Middleware to check authentication
-function isAuthenticated(req: express.Request, res: express.Response, next: express.NextFunction) {
-    if (req.isAuthenticated()) return next();
-    res.redirect('/login');
-}
-
-// Error Handling Middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error(err.stack);
-    res.status(500).send('Something broke!');
-});
-
 // Start Server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

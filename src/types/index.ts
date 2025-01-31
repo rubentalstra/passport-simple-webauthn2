@@ -6,11 +6,6 @@ import type {
   Base64URLString,
 } from "@simplewebauthn/server";
 
-export interface UserModel {
-  id: string;
-  username: string;
-}
-
 export interface Passkey {
   id: Base64URLString;
   publicKey: Uint8Array;
@@ -28,9 +23,8 @@ export interface SimpleWebAuthnStrategyOptions {
     credentialID: string,
     newCounter: number,
   ) => Promise<void>;
-  findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>;
-  registerPasskey: (
-    user: UserModel,
-    passkey: Passkey,
-  ) => Promise<Map<string, Passkey>>;
+  findUserIDByWebAuthnID: (
+    webauthnUserID: string,
+  ) => Promise<Base64URLString | null>;
+  registerPasskey: (userID: Base64URLString, passkey: Passkey) => Promise<void>;
 }

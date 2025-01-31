@@ -7,22 +7,24 @@ import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
-import type { UserModel, Passkey } from "../types";
+import type { Passkey } from "../types";
 
 /**
  * Generates registration options for a new WebAuthn credential.
- * @param user - The user requesting registration.
+ * @param userID - The user ID requesting registration.
+ * @param username - The associated username (for display purposes).
  * @returns A promise that resolves to the registration options JSON.
  */
 export const generateRegistration = async (
-  user: UserModel,
+  userID: string,
+  username: string,
 ): Promise<PublicKeyCredentialCreationOptionsJSON> => {
   try {
     return await generateRegistrationOptions({
       rpName: process.env.RP_NAME || "Example RP",
       rpID: process.env.RP_ID || "example.com",
-      userName: user.username,
-      userID: new TextEncoder().encode(user.id),
+      userName: username,
+      userID: new TextEncoder().encode(userID), // Only store the userID
       attestationType: "none",
       authenticatorSelection: {
         residentKey: "preferred",
@@ -43,19 +45,16 @@ export const generateRegistration = async (
 /**
  * Verifies the registration response from the client.
  * @param response - The registration response JSON from the client.
- * @param expectedChallenge - The expected challenge (retrieved externally).
- * @param findUserByWebAuthnID - Function to find a user by their WebAuthn ID.
+ * @param expectedChallenge - The expected challenge.
+ * @param findUserIDByWebAuthnID - Function to find a user ID by WebAuthn ID.
  * @param registerPasskey - Function to store the new passkey in the database.
  * @returns A promise that resolves to the verified registration response.
  */
 export const verifyRegistration = async (
   response: RegistrationResponseJSON,
   expectedChallenge: string,
-  findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>,
-  registerPasskey: (
-    user: UserModel,
-    passkey: Passkey,
-  ) => Promise<Map<string, Passkey>>,
+  findUserIDByWebAuthnID: (webauthnUserID: string) => Promise<string | null>,
+  registerPasskey: (userID: string, passkey: Passkey) => Promise<void>,
 ): Promise<VerifiedRegistrationResponse> => {
   try {
     if (!response || !response.id) {
@@ -64,7 +63,7 @@ export const verifyRegistration = async (
 
     const verification = await verifyRegistrationResponse({
       response,
-      expectedChallenge, // ✅ Ensure challenge is passed externally
+      expectedChallenge,
       expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
       expectedRPID: process.env.RP_ID || "example.com",
       requireUserVerification: true,
@@ -82,23 +81,23 @@ export const verifyRegistration = async (
       );
     }
 
-    let user = await findUserByWebAuthnID(webauthnUserID);
-    if (!user) {
+    const userID = await findUserIDByWebAuthnID(webauthnUserID);
+    if (!userID) {
       throw new Error("User not found");
     }
 
     const passkey: Passkey = {
       id: credential.id,
       publicKey: credential.publicKey,
-      userID: user.id, // ✅ Store only `userID`
-      webauthnUserID, // ✅ Store correct WebAuthn user ID
+      userID, // Store only the userID
+      webauthnUserID,
       counter: verification.registrationInfo.credential.counter,
       transports: credential.transports ?? [],
       deviceType: verification.registrationInfo.credentialDeviceType,
       backedUp: verification.registrationInfo.credentialBackedUp,
     };
 
-    await registerPasskey(user, passkey);
+    await registerPasskey(userID, passkey);
 
     return verification;
   } catch (error: any) {

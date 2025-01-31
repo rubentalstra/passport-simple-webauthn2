@@ -15,14 +15,14 @@ export class SimpleWebAuthnStrategy extends Strategy {
 
   private readonly findPasskeyByCredentialID: SimpleWebAuthnStrategyOptions["findPasskeyByCredentialID"];
   private readonly updatePasskeyCounter: SimpleWebAuthnStrategyOptions["updatePasskeyCounter"];
-  private readonly findUserByWebAuthnID: SimpleWebAuthnStrategyOptions["findUserByWebAuthnID"];
+  private readonly findUserIDByWebAuthnID: SimpleWebAuthnStrategyOptions["findUserIDByWebAuthnID"];
   private readonly registerPasskey: SimpleWebAuthnStrategyOptions["registerPasskey"];
 
   constructor(options: SimpleWebAuthnStrategyOptions) {
     super();
     this.findPasskeyByCredentialID = options.findPasskeyByCredentialID;
     this.updatePasskeyCounter = options.updatePasskeyCounter;
-    this.findUserByWebAuthnID = options.findUserByWebAuthnID;
+    this.findUserIDByWebAuthnID = options.findUserIDByWebAuthnID;
     this.registerPasskey = options.registerPasskey;
   }
 
@@ -100,16 +100,16 @@ export class SimpleWebAuthnStrategy extends Strategy {
 
       const credential = verification.registrationInfo.credential;
       const webauthnUserID = credential.id;
-      let user = await this.findUserByWebAuthnID(webauthnUserID);
+      const userID = await this.findUserIDByWebAuthnID(webauthnUserID);
 
-      if (!user) {
+      if (!userID) {
         return this.fail({ message: "User not found" }, 404);
       }
 
       const newPasskey: Passkey = {
         id: credential.id,
         publicKey: credential.publicKey,
-        userID: user.id,
+        userID,
         webauthnUserID,
         counter: verification.registrationInfo.credential.counter,
         deviceType: verification.registrationInfo.credentialDeviceType,
@@ -117,9 +117,9 @@ export class SimpleWebAuthnStrategy extends Strategy {
         transports: credential.transports ?? [],
       };
 
-      await this.registerPasskey(user, newPasskey);
+      await this.registerPasskey(userID, newPasskey);
 
-      this.success(user);
+      this.success(userID);
     } catch (error) {
       this.error(error instanceof Error ? error : new Error("Unknown error"));
     }

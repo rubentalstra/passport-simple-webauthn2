@@ -34,7 +34,7 @@ export const verifyAuthentication = async (
 
     const verification = await verifyAuthenticationResponse({
       response,
-      expectedChallenge, // ✅ Ensure challenge is passed externally
+      expectedChallenge,
       expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
       expectedRPID: process.env.RP_ID || "example.com",
       credential: {
