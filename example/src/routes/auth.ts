@@ -6,17 +6,18 @@ import {
     generateRegistrationOptions,
     verifyRegistrationResponse,
     generateAuthenticationOptions,
-    verifyAuthenticationResponse, RegistrationResponseJSON, WebAuthnCredential, AuthenticationResponseJSON,
+    verifyAuthenticationResponse,
+    RegistrationResponseJSON,
+    WebAuthnCredential,
+    AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
 import { v4 as uuidv4 } from 'uuid';
-import {User} from "../types";
+import { User } from "../types";
 import {
-    base64URLToBuffer,
     bufferToBase64URL,
- serializeAuthenticationOptions,
+    serializeAuthenticationOptions,
     serializeRegistrationOptions
 } from "../utils";
-
 
 const router = express.Router();
 router.use(express.json());
@@ -88,13 +89,14 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
         attestationType: 'none',
         // Exclude already registered credentials
         excludeCredentials: user.passkeys.map((cred) => ({
-            id: cred.id,
+            id: cred.id, // Convert Base64URL string to Buffer
+            type: 'public-key',
             transports: cred.transports,
         })),
         authenticatorSelection: {
             userVerification: 'preferred',
+            authenticatorAttachment: 'platform',
         },
-        preferredAuthenticatorType: 'localDevice'
     });
 
     // Store the challenge for this user
@@ -103,8 +105,12 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
     // Serialize options to send to the client
     const optionsJSON = serializeRegistrationOptions(options);
 
+    // Optional: Log the serialized options for debugging
+    console.log('Registration Options Sent to Client:', optionsJSON);
+
     res.json(optionsJSON);
 });
+
 /**
  * 🔹 WebAuthn Register Callback
  * Verifies the registration response and registers the new credential.
@@ -141,7 +147,7 @@ router.post('/register-callback', async (req: Request, res: Response) => {
                 clientExtensionResults: credential.clientExtensionResults,
             },
             expectedChallenge: storedChallenge,
-            expectedOrigin: `https://${process.env.RP_ID}`, // Update to your origin
+            expectedOrigin: `https://${process.env.RP_ID}`, // Ensure this matches your origin
             expectedRPID: process.env.RP_ID || 'localhost',
             requireUserVerification: true,
         });
@@ -162,6 +168,9 @@ router.post('/register-callback', async (req: Request, res: Response) => {
 
         // Register the new credential with the user
         user.passkeys.push(newCredential);
+
+        // Optional: Log the new credential for debugging
+        console.log('New Credential Registered:', newCredential);
 
         // Log the user in
         req.login(user, (err) => {
@@ -203,9 +212,10 @@ router.post('/login-challenge', async (req: Request, res: Response) => {
     // Generate authentication options
     const options = await generateAuthenticationOptions({
         rpID: process.env.RP_ID || 'localhost',
-        userVerification: 'discouraged',
+        userVerification: 'discouraged', // Adjust based on your security requirements
         allowCredentials: user.passkeys.map((cred: WebAuthnCredential) => ({
             id: cred.id,
+            type: 'public-key',
             transports: cred.transports,
         })),
     });
@@ -216,9 +226,11 @@ router.post('/login-challenge', async (req: Request, res: Response) => {
     // Serialize options to send to the client
     const optionsJSON = serializeAuthenticationOptions(options);
 
+    // Optional: Log the serialized options for debugging
+    console.log('Authentication Options Sent to Client:', optionsJSON);
+
     res.json(optionsJSON);
 });
-
 
 /**
  * 🔹 Authenticate with WebAuthn
@@ -243,7 +255,7 @@ router.post('/login-callback', async (req: Request, res: Response) => {
     delete challenges[user.userID];
 
     try {
-        // Find the corresponding credential
+        // Find the corresponding passkey
         const passkey = user.passkeys.find((p) => p.id === credential.id);
         if (!passkey) {
             return res.status(400).json({ error: 'Passkey not found' });
@@ -265,7 +277,7 @@ router.post('/login-callback', async (req: Request, res: Response) => {
 
         // Prepare the WebAuthnCredential object
         const webauthnCredential: WebAuthnCredential = {
-            id: passkey.id, // base64url string
+            id: passkey.id, // Base64URL string
             publicKey: passkey.publicKey, // Uint8Array
             counter: passkey.counter,
             transports: passkey.transports,
@@ -275,7 +287,7 @@ router.post('/login-callback', async (req: Request, res: Response) => {
         const verification = await verifyAuthenticationResponse({
             response: response,
             expectedChallenge: storedChallenge,
-            expectedOrigin: `https://${process.env.RP_ID}`, // Update to your origin
+            expectedOrigin: `https://${process.env.RP_ID}`, // Ensure this matches your origin
             expectedRPID: process.env.RP_ID || 'localhost',
             credential: webauthnCredential,
             requireUserVerification: true,
@@ -285,8 +297,11 @@ router.post('/login-callback', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Verification failed' });
         }
 
-        // Update the counter
+        // Update the counter to prevent replay attacks
         passkey.counter = verification.authenticationInfo.newCounter;
+
+        // Optional: Log the verification info for debugging
+        console.log('Authentication Verified:', verification.authenticationInfo);
 
         // Log the user in
         req.login(user, (err) => {
