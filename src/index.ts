@@ -100,7 +100,10 @@ export class WebAuthnStrategy extends PassportStrategy {
       const verification = await verifyRegistrationResponse({
         response: credential,
         expectedChallenge: challenge,
-        expectedOrigin: `https://${this.rpID}`,
+        expectedOrigin:
+          process.env.NODE_ENV === "development"
+            ? `http://${this.rpID}`
+            : `https://${this.rpID}`,
         expectedRPID: this.rpID || "localhost",
         requireUserVerification: true,
       });
@@ -173,21 +176,24 @@ export class WebAuthnStrategy extends PassportStrategy {
     const challenge = await this.challengeStore.get(user.userID);
     if (!challenge) throw new Error("Challenge not found");
 
-    // Find the registered passkey by comparing credential ids.
-    const passkey = user.passkeys.find(
-      (p) => p.id === bufferToBase64URL(credential.id),
-    );
+    // Compare directly (do not re-encode the credential id)
+    const passkey = user.passkeys.find((p) => p.id === credential.id);
     if (!passkey) throw new Error("Passkey not found");
 
     try {
       const verification = await verifyAuthenticationResponse({
         response: credential,
         expectedChallenge: challenge,
-        expectedOrigin: `https://${process.env.RP_ID}`,
-        expectedRPID: process.env.RP_ID || "localhost",
+        // Adjust expected origin based on environment.
+        expectedOrigin:
+          process.env.NODE_ENV === "development"
+            ? `http://${this.rpID}`
+            : `https://${this.rpID}`,
+        expectedRPID: this.rpID,
         credential: {
           id: passkey.id,
-          publicKey: passkey.publicKey,
+          // Ensure that publicKey is passed as a Buffer
+          publicKey: Buffer.from(passkey.publicKey),
           counter: passkey.counter,
           transports: passkey.transports,
         },

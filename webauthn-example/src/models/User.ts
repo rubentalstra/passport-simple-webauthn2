@@ -20,7 +20,8 @@ const UserSchema = new Schema<IUser>({
             publicKey: {
                 type: Buffer,
                 required: true,
-                set: (val: Uint8Array | Buffer) => Buffer.isBuffer(val) ? val : Buffer.from(val)
+                set: (val: Uint8Array | Buffer) => Buffer.isBuffer(val) ? val : Buffer.from(val),
+                get: (val: Buffer) => new Uint8Array(val.buffer, val.byteOffset, val.byteLength),
             },
             counter: { type: Number, required: true },
             transports: { type: [String], required: true },
