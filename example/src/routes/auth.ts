@@ -1,5 +1,4 @@
 import express, { Request, Response } from 'express';
-import session from 'express-session';
 import passport from 'passport';
 import {
     generateRegistrationOptions,
@@ -18,32 +17,36 @@ import {
 
 const router = express.Router();
 router.use(express.json());
+router.use(express.urlencoded({ extended: true }));
 
-// Temporary in-memory storage (use a persistent database in production)
+// 🛠️ FIX: Use an in-memory object to store users
+const users: Record<string, { userID: string, username: string, passkeys: WebAuthnCredential[] }> = {};
 const challenges: Record<string, string> = {};
-const users: Record<string, User> = {};
 
-// Session middleware setup
-router.use(
-    session({
-        secret: 'your_secret_key',
-        resave: false,
-        saveUninitialized: false,
-        cookie: { secure: true }, // Set to true if using HTTPS
-    })
-);
-
-// Initialize Passport
-router.use(passport.initialize());
-router.use(passport.session());
-
+/**
+ * 🔹 FIX: Serialize & Deserialize User Correctly for In-Memory Storage
+ */
 passport.serializeUser((user: any, done) => {
-    done(null, user.userID);
+    console.log("Serializing user ID:", user.userID);
+    done(null, user.userID); // Store only the userID in session
 });
 
 passport.deserializeUser((userID: string, done) => {
+    console.log("Deserializing user with ID:", userID);
     const user = users[userID];
-    done(null, user || null);
+    if (user) {
+        console.log("User found:", user);
+        return done(null, user);
+    }
+    console.log("User not found");
+    return done(null, false);
+});
+
+/**
+ * 🔹 Register Page
+ */
+router.get('/', (req: Request, res: Response) => {
+    res.render('index');
 });
 
 /**
@@ -52,6 +55,7 @@ passport.deserializeUser((userID: string, done) => {
 router.get('/register', (req: Request, res: Response) => {
     res.render('register');
 });
+
 
 /**
  * 🔹 Generate WebAuthn Registration Challenge
@@ -128,8 +132,18 @@ router.post('/register-callback', async (req: Request, res: Response) => {
         console.log("Updated user data:", users[user.userID]);
 
         req.login(user, (err) => {
-            if (err) return res.status(500).json({ error: 'Internal Server Error' });
-            res.json({ success: true });
+            if (err) {
+                console.error('Login error:', err);
+                return res.status(500).json({ error: 'Login failed' });
+            }
+            req.session.save((err) => {
+                if (err) {
+                    console.error('Session save error:', err);
+                    return res.status(500).json({ error: 'Session save failed' });
+                }
+                console.log('Session successfully saved:', req.session);
+                res.json({ success: true });
+            });
         });
     } catch (error) {
         res.status(500).json({ error: 'Internal Server Error' });
@@ -208,8 +222,18 @@ router.post('/login-callback', async (req: Request, res: Response) => {
         passkey.counter = verification.authenticationInfo.newCounter;
 
         req.login(user, (err) => {
-            if (err) return res.status(500).json({ error: 'Internal Server Error' });
-            res.json({ success: true });
+            if (err) {
+                console.error('Login error:', err);
+                return res.status(500).json({ error: 'Login failed' });
+            }
+            req.session.save((err) => {
+                if (err) {
+                    console.error('Session save error:', err);
+                    return res.status(500).json({ error: 'Session save failed' });
+                }
+                console.log('Session successfully saved:', req.session);
+                res.json({ success: true });
+            });
         });
     } catch (error) {
         res.status(500).json({ error: 'Internal Server Error' });
@@ -221,9 +245,15 @@ router.post('/login-callback', async (req: Request, res: Response) => {
  * Renders the account page for authenticated users.
  */
 router.get('/account', (req: Request, res: Response) => {
-    // if (!req.isAuthenticated()) return res.redirect('/login');
-    const user = Object.values(users).find((u) => u.username === username);
-    res.render('account', { user: user }); // Ensure you have a view engine set up
+    console.log('Session Data:', req.session);
+    console.log('Authenticated User:', req.user);
+
+    if (!req.isAuthenticated()) {
+        console.log('User is not authenticated. Redirecting...');
+        return res.redirect('/login');
+    }
+
+    res.render('account', { user: req.user });
 });
 
 /**
@@ -232,7 +262,9 @@ router.get('/account', (req: Request, res: Response) => {
 router.get('/logout', (req: Request, res: Response) => {
     req.logout((err) => {
         if (err) return res.status(500).send('Error logging out.');
-        res.redirect('/');
+        req.session.destroy(() => {
+            res.redirect('/');
+        });
     });
 });
 
