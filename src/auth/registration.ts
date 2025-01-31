@@ -52,7 +52,10 @@ export const verifyRegistration = async (
   response: RegistrationResponseJSON,
   expectedChallenge: string,
   findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>,
-  registerPasskey: (user: UserModel, passkey: Passkey) => Promise<void>,
+  registerPasskey: (
+    user: UserModel,
+    passkey: Passkey,
+  ) => Promise<Map<string, Passkey>>,
 ): Promise<VerifiedRegistrationResponse> => {
   try {
     if (!response || !response.id) {
