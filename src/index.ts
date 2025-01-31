@@ -60,14 +60,13 @@ export class WebAuthnStrategy extends PassportStrategy {
     }
 
     const options = await generateRegistrationOptions({
-      rpName: this.rpName,
-      rpID: this.rpID,
+      rpName: this.rpName || "WebAuthn Demo",
+      rpID: this.rpID || "localhost",
       userID: Buffer.from(user.userID, "utf-8"),
       userName: user.username,
       attestationType: "none",
-      // Exclude already registered credentials.
       excludeCredentials: user.passkeys.map((cred) => ({
-        id: cred.id, // stored as a base64url string
+        id: bufferToBase64URL(cred.id),
         type: "public-key",
         transports: cred.transports || ["internal", "usb", "ble", "nfc"],
       })),
@@ -102,7 +101,7 @@ export class WebAuthnStrategy extends PassportStrategy {
         response: credential,
         expectedChallenge: challenge,
         expectedOrigin: `https://${this.rpID}`,
-        expectedRPID: this.rpID,
+        expectedRPID: this.rpID || "localhost",
         requireUserVerification: true,
       });
 
@@ -118,7 +117,7 @@ export class WebAuthnStrategy extends PassportStrategy {
       // Store id as a base64url string and the public key as a Buffer.
       user.passkeys.push({
         id: bufferToBase64URL(id),
-        publicKey: Buffer.from(publicKey),
+        publicKey: new Uint8Array(publicKey),
         counter,
         transports,
       });
@@ -144,7 +143,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     );
 
     const options = await generateAuthenticationOptions({
-      rpID: this.rpID,
+      rpID: this.rpID || "localhost",
       userVerification: "required",
       allowCredentials:
         platformCredentials.length > 0
@@ -175,21 +174,20 @@ export class WebAuthnStrategy extends PassportStrategy {
     if (!challenge) throw new Error("Challenge not found");
 
     // Find the registered passkey by comparing credential ids.
-    const passkey = user.passkeys.find((p) => p.id === credential.id);
+    const passkey = user.passkeys.find(
+      (p) => p.id === bufferToBase64URL(credential.id),
+    );
     if (!passkey) throw new Error("Passkey not found");
 
     try {
       const verification = await verifyAuthenticationResponse({
         response: credential,
         expectedChallenge: challenge,
-        expectedOrigin:
-          process.env.NODE_ENV === "development"
-            ? "http://localhost"
-            : `https://${this.rpID}`,
-        expectedRPID: this.rpID,
+        expectedOrigin: `https://${process.env.RP_ID}`,
+        expectedRPID: process.env.RP_ID || "localhost",
         credential: {
           id: passkey.id,
-          publicKey: Buffer.from(passkey.publicKey), // Ensure this is a Buffer
+          publicKey: passkey.publicKey,
           counter: passkey.counter,
           transports: passkey.transports,
         },

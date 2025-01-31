@@ -1,3 +1,4 @@
+<!-- views/login.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,7 +24,7 @@
 
             if (!username) return alert('Username is required!');
 
-            submitButton.disabled = true;
+            submitButton.disabled = true; // Prevent duplicate requests
 
             try {
                 const challengeResponse = await fetch('/auth/login/challenge', {
@@ -31,6 +32,11 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username }),
                 });
+
+                if (!challengeResponse.ok) {
+                    const error = await challengeResponse.json();
+                    throw new Error(error.error);
+                }
 
                 const options = await challengeResponse.json();
                 options.challenge = base64URLToArrayBuffer(options.challenge);
@@ -43,6 +49,7 @@
                 }
 
                 const credential = await navigator.credentials.get({ publicKey: options });
+
                 if (!credential) throw new Error('Failed to get credential');
 
                 const authenticationResponse = {
@@ -72,9 +79,10 @@
                     throw new Error(result.error);
                 }
             } catch (error) {
+                console.error('Login Error:', error);
                 alert('Authentication failed: ' + error.message);
             } finally {
-                submitButton.disabled = false;
+                submitButton.disabled = false; // Re-enable the button
             }
         }
     </script>

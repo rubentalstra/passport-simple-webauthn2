@@ -1,3 +1,4 @@
+<!-- views/register.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,7 +24,7 @@
 
             if (!username) return alert('Username is required!');
 
-            submitButton.disabled = true;
+            submitButton.disabled = true; // Prevent duplicate requests
 
             try {
                 const challengeResponse = await fetch('/auth/register/challenge', {
@@ -39,9 +40,7 @@
 
                 const options = await challengeResponse.json();
                 options.challenge = base64URLToArrayBuffer(options.challenge);
-                if (options.user && options.user.id) {
-                    options.user.id = base64URLToArrayBuffer(options.user.id);
-                }
+                options.user.id = base64URLToArrayBuffer(options.user.id);
 
                 if (options.excludeCredentials) {
                     options.excludeCredentials = options.excludeCredentials.map(cred => ({
@@ -50,7 +49,15 @@
                     }));
                 }
 
+                // Ensure we request a platform authenticator (Touch ID)
+                options.authenticatorSelection = {
+                    authenticatorAttachment: 'platform',
+                    residentKey: 'preferred',
+                    userVerification: 'preferred'
+                };
+
                 const credential = await navigator.credentials.create({ publicKey: options });
+
                 if (!credential) throw new Error('Failed to create credential');
 
                 const registrationResponse = {
@@ -79,7 +86,7 @@
                 console.error('Registration Error:', error);
                 alert('Registration failed: ' + error.message);
             } finally {
-                submitButton.disabled = false;
+                submitButton.disabled = false; // Re-enable the button
             }
         }
     </script>

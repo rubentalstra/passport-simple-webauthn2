@@ -50,9 +50,9 @@ router.post("/login/callback", async (req: Request, res: Response, next: NextFun
         if (!credential) throw new Error("Missing credential data");
 
         const user = await webAuthnStrategy.loginCallback(req, username, credential);
-        req.login(user, (err) => {
-            if (err) return next(err);
-            res.json({ success: true, user });
+        req.login(user, err => {
+            if (err) return res.status(500).json({ error: 'Login failed' });
+            req.session.save(() => res.json({ success: true }));
         });
     } catch (error) {
         next(error);
