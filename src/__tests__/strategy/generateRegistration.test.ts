@@ -64,6 +64,6 @@ describe('generateRegistration', () => {
         });
 
         // Act & Assert
-        await expect(generateRegistration(mockUser)).rejects.toThrow('Failed to generate registration options');
+        await expect(generateRegistration(mockUser)).rejects.toThrow("Generation failed");
     });
 });
