@@ -7,6 +7,4 @@
  */
 
 export * from "./types";
-export * from "./auth/registration";
-export * from "./strategy/simpleWebAuthnStrategy";
-export * from "./strategy/verifyAuthentication";
+export * from "./strategy/SimpleWebAuthnStrategy";

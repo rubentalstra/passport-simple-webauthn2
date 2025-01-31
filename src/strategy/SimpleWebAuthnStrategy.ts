@@ -1,36 +1,40 @@
+// strategies/SimpleWebAuthnStrategy.ts
+
 import { Strategy } from "passport-strategy";
 import type { Request } from "express";
+import type {
+  VerifiedAuthenticationResponse,
+  VerifiedRegistrationResponse,
+} from "@simplewebauthn/server";
 import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import type { SimpleWebAuthnStrategyOptions, Passkey } from "../types";
-import type { VerifiedRegistrationResponse } from "@simplewebauthn/server";
 
 /**
- * Passport strategy for WebAuthn authentication.
+ * Unified Passport strategy for WebAuthn authentication and registration.
  */
 export class SimpleWebAuthnStrategy extends Strategy {
   public name = "simple-webauthn";
 
   private readonly findPasskeyByCredentialID: SimpleWebAuthnStrategyOptions["findPasskeyByCredentialID"];
   private readonly updatePasskeyCounter: SimpleWebAuthnStrategyOptions["updatePasskeyCounter"];
-  private readonly findUserIDByWebAuthnID: SimpleWebAuthnStrategyOptions["findUserIDByWebAuthnID"];
   private readonly registerPasskey: SimpleWebAuthnStrategyOptions["registerPasskey"];
 
   constructor(options: SimpleWebAuthnStrategyOptions) {
     super();
     this.findPasskeyByCredentialID = options.findPasskeyByCredentialID;
     this.updatePasskeyCounter = options.updatePasskeyCounter;
-    this.findUserIDByWebAuthnID = options.findUserIDByWebAuthnID;
     this.registerPasskey = options.registerPasskey;
   }
 
   authenticate(req: Request, _options?: any): void {
     const action = req.path.split("/").pop();
-    if (action === "login") {
+
+    if (action === "login-callback") {
       this.handleAuthentication(req);
-    } else if (action === "register") {
+    } else if (action === "register-callback") {
       this.handleRegistration(req);
     } else {
       this.fail({ message: "Unknown action" }, 400);
@@ -40,6 +44,7 @@ export class SimpleWebAuthnStrategy extends Strategy {
   private async handleAuthentication(req: Request): Promise<void> {
     try {
       const { response, expectedChallenge } = req.body;
+
       if (!response || !expectedChallenge) {
         return this.fail({ message: "Missing response or challenge" }, 400);
       }
@@ -49,19 +54,20 @@ export class SimpleWebAuthnStrategy extends Strategy {
         return this.fail({ message: "Credential not found" }, 404);
       }
 
-      const verification = await verifyAuthenticationResponse({
-        response,
-        expectedChallenge,
-        expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
-        expectedRPID: process.env.RP_ID || "example.com",
-        credential: {
-          id: passkey.id,
-          publicKey: passkey.publicKey,
-          counter: passkey.counter,
-          transports: passkey.transports ?? [],
-        },
-        requireUserVerification: true,
-      });
+      const verification: VerifiedAuthenticationResponse =
+        await verifyAuthenticationResponse({
+          response,
+          expectedChallenge,
+          expectedOrigin: `https://${process.env.RP_ID || "example.com"}`,
+          expectedRPID: process.env.RP_ID || "example.com",
+          credential: {
+            id: passkey.id,
+            publicKey: passkey.publicKey,
+            counter: passkey.counter,
+            transports: passkey.transports ?? [],
+          },
+          requireUserVerification: true,
+        });
 
       if (!verification.verified) {
         return this.fail({ message: "Verification failed" }, 403);
@@ -74,15 +80,23 @@ export class SimpleWebAuthnStrategy extends Strategy {
 
       this.success(passkey.userID);
     } catch (error) {
-      this.error(error instanceof Error ? error : new Error("Unknown error"));
+      this.error(
+        error instanceof Error
+          ? error
+          : new Error("Unknown authentication error"),
+      );
     }
   }
 
   private async handleRegistration(req: Request): Promise<void> {
     try {
-      const { response, expectedChallenge } = req.body;
-      if (!response || !expectedChallenge) {
-        return this.fail({ message: "Missing response or challenge" }, 400);
+      const { response, expectedChallenge, userID } = req.body;
+
+      if (!response || !expectedChallenge || !userID) {
+        return this.fail(
+          { message: "Missing response, challenge, or userID" },
+          400,
+        );
       }
 
       const verification: VerifiedRegistrationResponse =
@@ -100,13 +114,8 @@ export class SimpleWebAuthnStrategy extends Strategy {
 
       const credential = verification.registrationInfo.credential;
       const webauthnUserID = credential.id;
-      const userID = await this.findUserIDByWebAuthnID(webauthnUserID);
 
-      if (!userID) {
-        return this.fail({ message: "User not found" }, 404);
-      }
-
-      const newPasskey: Passkey = {
+      const passkey: Passkey = {
         id: credential.id,
         publicKey: credential.publicKey,
         userID,
@@ -117,11 +126,15 @@ export class SimpleWebAuthnStrategy extends Strategy {
         transports: credential.transports ?? [],
       };
 
-      await this.registerPasskey(userID, newPasskey);
+      await this.registerPasskey(userID, passkey);
 
       this.success(userID);
     } catch (error) {
-      this.error(error instanceof Error ? error : new Error("Unknown error"));
+      this.error(
+        error instanceof Error
+          ? error
+          : new Error("Unknown registration error"),
+      );
     }
   }
 }

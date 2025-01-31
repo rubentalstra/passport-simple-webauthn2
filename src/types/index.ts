@@ -3,28 +3,30 @@
 import type {
   AuthenticatorTransportFuture,
   CredentialDeviceType,
-  Base64URLString,
 } from "@simplewebauthn/server";
 
+/**
+ * Passkey information stored in the server.
+ */
 export interface Passkey {
-  id: Base64URLString;
+  id: string; // Base64URLString
   publicKey: Uint8Array;
-  userID: Base64URLString;
-  webauthnUserID: Base64URLString;
+  userID: string; // Base64URLString
+  webauthnUserID: string; // Base64URLString
   counter: number;
   deviceType?: CredentialDeviceType;
   backedUp?: boolean;
   transports?: AuthenticatorTransportFuture[] | undefined;
 }
 
+/**
+ * Options required by the WebAuthn Passport strategies.
+ */
 export interface SimpleWebAuthnStrategyOptions {
   findPasskeyByCredentialID: (credentialID: string) => Promise<Passkey | null>;
   updatePasskeyCounter: (
     credentialID: string,
     newCounter: number,
   ) => Promise<void>;
-  findUserIDByWebAuthnID: (
-    webauthnUserID: string,
-  ) => Promise<Base64URLString | null>;
-  registerPasskey: (userID: Base64URLString, passkey: Passkey) => Promise<void>;
+  registerPasskey: (userID: string, passkey: Passkey) => Promise<void>;
 }
