@@ -1,4 +1,4 @@
-import type { Base64URLString } from "../example/src/types";
+export type Base64URLString = string;
 
 /**
  * Converts an ArrayBuffer to a Base64URL-encoded string.

@@ -1,8 +1,8 @@
-import { WebAuthnStrategy } from "../";
+import { WebAuthnStrategy } from "../index";
 import type { WebAuthnUser, UserStore, ChallengeStore } from "../types";
 import { Request } from "express";
 import { v4 as uuidv4 } from "uuid";
-import {AuthenticationResponseJSON, RegistrationResponseJSON} from "@simplewebauthn/server";
+import {AuthenticationResponseJSON } from "@simplewebauthn/server";
 
 class MockUserStore implements UserStore {
     private users: Record<string, WebAuthnUser> = {};
