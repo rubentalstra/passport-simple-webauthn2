@@ -1,12 +1,13 @@
 export type Base64URLString = string;
 
-/**
- * Converts an ArrayBuffer to a Base64URL-encoded string.
- * @param buffer - The ArrayBuffer to convert.
- * @returns A Base64URL-encoded string.
- */
-export function bufferToBase64URL(buffer: Base64URLString): Base64URLString {
-  return Buffer.from(buffer).toString("base64url");
+// utils.ts
+export function bufferToBase64URL(
+  input: ArrayBuffer | Buffer | string,
+): string {
+  if (typeof input === "string") {
+    return input; // assume already base64url encoded
+  }
+  return Buffer.from(input).toString("base64url");
 }
 
 export const serializeAuthenticationOptions = (

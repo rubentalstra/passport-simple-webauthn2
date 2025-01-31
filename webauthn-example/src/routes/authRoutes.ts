@@ -47,7 +47,7 @@ router.post("/login/challenge", async (req: Request, res: Response) => {
 });
 
 
-router.post("/login-callback", async (req: Request, res: Response, next: NextFunction) => {
+router.post("/login/callback", async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { username, credential } = req.body;
         if (!credential) {

@@ -65,8 +65,9 @@ export class WebAuthnStrategy extends PassportStrategy {
       userID: Buffer.from(user.userID, "utf-8"),
       userName: user.username,
       attestationType: "none",
+      // Use stored passkey IDs directly (no extra conversion)
       excludeCredentials: user.passkeys.map((cred) => ({
-        id: bufferToBase64URL(cred.id),
+        id: cred.id,
         type: "public-key",
         transports: cred.transports || ["internal", "usb", "ble", "nfc"],
       })),
@@ -77,6 +78,7 @@ export class WebAuthnStrategy extends PassportStrategy {
       },
     });
 
+    // Save the challenge (convert it because it is an ArrayBuffer)
     await this.challengeStore.save(
       user.userID,
       bufferToBase64URL(options.challenge),
@@ -113,9 +115,10 @@ export class WebAuthnStrategy extends PassportStrategy {
       const { publicKey, id, counter, transports } =
         verification.registrationInfo.credential;
 
+      // Store the id as provided and convert publicKey into a Buffer
       user.passkeys.push({
         id: id,
-        publicKey: new Uint8Array(publicKey),
+        publicKey: Buffer.from(publicKey),
         counter,
         transports,
       });
@@ -143,10 +146,11 @@ export class WebAuthnStrategy extends PassportStrategy {
     const options = await generateAuthenticationOptions({
       rpID: this.rpID,
       userVerification: "required",
+      // Pass the stored credential IDs directly
       allowCredentials:
         platformCredentials.length > 0
           ? platformCredentials.map((cred) => ({
-              id: bufferToBase64URL(cred.id),
+              id: cred.id,
               type: "public-key",
               transports: cred.transports,
             }))
@@ -171,7 +175,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     const challenge = await this.challengeStore.get(user.userID);
     if (!challenge) throw new Error("Challenge not found");
 
-    // IMPORTANT: Compare the received credential.id directly (it is already Base64URL encoded)
+    // Compare the received credential.id directly
     const passkey = user.passkeys.find((p) => p.id === credential.id);
     if (!passkey) throw new Error("Passkey not found");
 
