@@ -2,6 +2,7 @@ import { WebAuthnStrategy } from "../";
 import type { WebAuthnUser, UserStore, ChallengeStore } from "../types";
 import { Request } from "express";
 import { v4 as uuidv4 } from "uuid";
+import {AuthenticationResponseJSON, RegistrationResponseJSON} from "@simplewebauthn/server";
 
 class MockUserStore implements UserStore {
     private users: Record<string, WebAuthnUser> = {};
@@ -66,10 +67,14 @@ describe("WebAuthnStrategy", () => {
         await userStore.save({ userID, username, passkeys: [] });
         await challengeStore.save(userID, "mocked-challenge");
 
-        const credential = {
+        const credential: RegistrationResponseJSON = {
             id: "test-id",
             rawId: "test-raw-id",
-            response: {},
+            response: {
+                attestationObject: "mocked-attestation-object",
+                clientDataJSON: "mocked-client-data-json",
+            },
+            clientExtensionResults: {},
             type: "public-key",
         };
 
@@ -117,7 +122,18 @@ describe("WebAuthnStrategy", () => {
     test("should handle missing user during login callback", async () => {
         const req = {} as Request;
         const username = "nonexistentuser";
-        const credential = { id: "test-id" };
+        const credential: AuthenticationResponseJSON = {
+            id: "test-id",
+            rawId: "test-raw-id",
+            response: {
+                authenticatorData: "mocked-authenticator-data",
+                clientDataJSON: "mocked-client-data-json",
+                signature: "mocked-signature",
+                userHandle: "mocked-user-handle",
+            },
+            clientExtensionResults: {},
+            type: "public-key",
+        };
 
         await expect(strategy.loginCallback(req, username, credential)).rejects.toThrow(
             "User not found"
@@ -142,7 +158,18 @@ describe("WebAuthnStrategy", () => {
             ],
         });
 
-        const credential = { id: "test-id" };
+        const credential: AuthenticationResponseJSON = {
+            id: "test-id",
+            rawId: "test-raw-id",
+            response: {
+                authenticatorData: "mocked-authenticator-data",
+                clientDataJSON: "mocked-client-data-json",
+                signature: "mocked-signature",
+                userHandle: "mocked-user-handle",
+            },
+            clientExtensionResults: {},
+            type: "public-key",
+        };
 
         await expect(strategy.loginCallback(req, username, credential)).rejects.toThrow(
             "Challenge not found"
@@ -157,7 +184,18 @@ describe("WebAuthnStrategy", () => {
         await userStore.save({ userID, username, passkeys: [] });
         await challengeStore.save(userID, "mocked-challenge");
 
-        const credential = { id: "test-id" };
+        const credential: AuthenticationResponseJSON = {
+            id: "test-id",
+            rawId: "test-raw-id",
+            response: {
+                authenticatorData: "mocked-authenticator-data",
+                clientDataJSON: "mocked-client-data-json",
+                signature: "mocked-signature",
+                userHandle: "mocked-user-handle",
+            },
+            clientExtensionResults: {},
+            type: "public-key",
+        };
 
         await expect(strategy.loginCallback(req, username, credential)).rejects.toThrow(
             "Passkey not found"

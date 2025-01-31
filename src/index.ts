@@ -13,6 +13,10 @@ import {
   serializeRegistrationOptions,
 } from "./utils";
 import type { UserStore, WebAuthnUser, ChallengeStore } from "./types";
+import type {
+  AuthenticationResponseJSON,
+  RegistrationResponseJSON,
+} from "@simplewebauthn/server/esm/types";
 
 export class WebAuthnStrategy extends PassportStrategy {
   name = "webauthn";
@@ -41,7 +45,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     return this.userStore.get(identifier, byID);
   }
 
-  async registerChallenge(req: Request, username: string) {
+  async registerChallenge(req: Request, username: string): Promise<any> {
     if (!username) throw new Error("Username required");
 
     let user = await this.getUser(username);
@@ -75,7 +79,11 @@ export class WebAuthnStrategy extends PassportStrategy {
     return serializeRegistrationOptions(options);
   }
 
-  async registerCallback(req: Request, username: string, credential: any) {
+  async registerCallback(
+    req: Request,
+    username: string,
+    credential: RegistrationResponseJSON,
+  ): Promise<WebAuthnUser> {
     const user = await this.getUser(username);
     if (!user) throw new Error("User not found");
 
@@ -108,12 +116,13 @@ export class WebAuthnStrategy extends PassportStrategy {
 
       await this.userStore.save(user);
       return user;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       throw new Error("Registration failed");
     }
   }
 
-  async loginChallenge(req: Request, username: string) {
+  async loginChallenge(req: Request, username: string): Promise<any> {
     const user = await this.getUser(username);
     if (!user) throw new Error("User not found");
 
@@ -141,7 +150,11 @@ export class WebAuthnStrategy extends PassportStrategy {
     return serializeAuthenticationOptions(options);
   }
 
-  async loginCallback(req: Request, username: string, credential: any) {
+  async loginCallback(
+    req: Request,
+    username: string,
+    credential: AuthenticationResponseJSON,
+  ): Promise<WebAuthnUser> {
     const user = await this.getUser(username);
     if (!user) throw new Error("User not found");
 
@@ -180,7 +193,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     }
   }
 
-  authenticate(req: Request) {
+  authenticate(_req: Request): void {
     throw new Error(
       "Use registerChallenge, registerCallback, loginChallenge, or loginCallback instead.",
     );
