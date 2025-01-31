@@ -11,47 +11,69 @@
 </form>
 
 <script>
+    function base64UrlEncode(buffer) {
+        return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+            .replace(/\+/g, "-") // Convert '+' to '-'
+            .replace(/\//g, "_") // Convert '/' to '_'
+            .replace(/=+$/, ""); // Remove padding '='
+    }
+
     document.getElementById('login-form').addEventListener('submit', async (event) => {
         event.preventDefault();
         const username = document.getElementById('username').value;
         if (!username) return alert("Username is required!");
 
         try {
-            // Step 1: Request login options from the server
             const optionsRes = await fetch('/login/options', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username })
             });
+
             const options = await optionsRes.json();
 
-            // Step 2: Get credential for authentication
-            const credential = await navigator.credentials.get({
-                publicKey: options
+            console.log("Authentication options:", options);
+
+            const credential = await navigator.credentials.get({ publicKey: options });
+
+            if (!credential) {
+                throw new Error("Failed to get authentication credential.");
+            }
+
+            console.log("Authentication credential:", credential);
+
+            const credentialResponse = {
+                id: credential.id,
+                type: credential.type,
+                rawId: base64UrlEncode(credential.rawId),
+                response: {
+                    clientDataJSON: base64UrlEncode(credential.response.clientDataJSON),
+                    authenticatorData: base64UrlEncode(credential.response.authenticatorData),
+                    signature: base64UrlEncode(credential.response.signature),
+                    userHandle: credential.response.userHandle ? base64UrlEncode(credential.response.userHandle) : null
+                }
+            };
+
+            console.log("Formatted credential response:", credentialResponse);
+
+            const loginRes = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, response: credentialResponse })
             });
 
-            // Step 3: Submit to Passport.js authentication
-            const loginForm = document.createElement("form");
-            loginForm.method = "POST";
-            loginForm.action = "/login";
+            if (!loginRes.ok) {
+                const errorText = await loginRes.text();
+                console.error("Login error:", errorText);
+                throw new Error("Login failed. " + errorText);
+            }
 
-            const usernameInput = document.createElement("input");
-            usernameInput.type = "hidden";
-            usernameInput.name = "username";
-            usernameInput.value = username;
+            alert("Login successful!");
+            window.location.href = "/dashboard";
 
-            const credentialInput = document.createElement("input");
-            credentialInput.type = "hidden";
-            credentialInput.name = "response";
-            credentialInput.value = JSON.stringify(credential);
-
-            loginForm.appendChild(usernameInput);
-            loginForm.appendChild(credentialInput);
-            document.body.appendChild(loginForm);
-            loginForm.submit();
         } catch (error) {
-            console.error(error);
-            alert("Login failed!");
+            console.error("Login error:", error);
+            alert("Login failed. Check the console for details.");
         }
     });
 </script>

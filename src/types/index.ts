@@ -14,7 +14,7 @@ export interface UserModel {
 export interface Passkey {
   id: Base64URLString;
   publicKey: Uint8Array;
-  user: UserModel;
+  userID: Base64URLString;
   webauthnUserID: Base64URLString;
   counter: number;
   deviceType?: CredentialDeviceType;

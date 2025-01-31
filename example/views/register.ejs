@@ -11,31 +11,72 @@
 </form>
 
 <script>
+    function base64UrlEncode(buffer) {
+        return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+            .replace(/\+/g, "-") // Convert '+' to '-'
+            .replace(/\//g, "_") // Convert '/' to '_'
+            .replace(/=+$/, ""); // Remove padding '='
+    }
+
     document.getElementById('register-form').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const username = document.getElementById('username').value;
+        const username = document.getElementById('username').value.trim();
         if (!username) return alert("Username is required!");
 
-        const optionsRes = await fetch('/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username })
-        });
+        try {
+            const optionsRes = await fetch('/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
 
-        const options = await optionsRes.json();
-        options.challenge = Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0));
-        options.user.id = Uint8Array.from(atob(options.user.id), c => c.charCodeAt(0));
+            const options = await optionsRes.json();
 
-        const credential = await navigator.credentials.create({ publicKey: options });
+            // Convert challenge and user ID to ArrayBuffer
+            options.challenge = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+            options.user.id = Uint8Array.from(atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 
-        await fetch('/register/callback', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, response: credential })
-        });
+            console.log("Generated WebAuthn options:", options);
 
-        alert("Registration successful!");
-        window.location.href = "/login";
+            const credential = await navigator.credentials.create({ publicKey: options });
+
+            if (!credential) {
+                throw new Error("Failed to generate credential.");
+            }
+
+            console.log("Created credential:", credential);
+
+            const credentialResponse = {
+                id: credential.id,
+                type: credential.type,
+                rawId: base64UrlEncode(credential.rawId),
+                response: {
+                    attestationObject: base64UrlEncode(credential.response.attestationObject),
+                    clientDataJSON: base64UrlEncode(credential.response.clientDataJSON)
+                }
+            };
+
+            console.log("Formatted credential response:", credentialResponse);
+
+            const callbackRes = await fetch('/register/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, response: credentialResponse })
+            });
+
+            if (!callbackRes.ok) {
+                const errorText = await callbackRes.text();
+                console.error("Callback error:", errorText);
+                throw new Error("Registration callback failed. " + errorText);
+            }
+
+            alert("Registration successful!");
+            // window.location.href = "/login";
+
+        } catch (error) {
+            console.error("Registration error:", error);
+            alert("Registration failed. Check the console for details.");
+        }
     });
 </script>
 </body>

@@ -22,8 +22,8 @@ describe('SimpleWebAuthnStrategy', () => {
     const mockPasskey: Passkey = {
         id: 'credential123',
         publicKey: new Uint8Array([1, 2, 3]),
-        user: mockUser,
-        webauthnUserID: 'user123', // Should be Base64URLString
+        userID: 'user123', // ✅ Correctly store WebAuthn ID
+        webauthnUserID: 'webauthn-user-123',
         counter: 10,
         transports: ['usb'],
     };
@@ -75,12 +75,12 @@ describe('SimpleWebAuthnStrategy', () => {
         strategy = new SimpleWebAuthnStrategy(options);
     });
 
-    it('should handle authentication successfully', async () => {
+    it('should handle successful authentication', async () => {
         const mockVerification: VerifiedAuthenticationResponse = {
             verified: true,
             authenticationInfo: {
                 newCounter: 11,
-                credentialID: 'credential123',
+                credentialID: mockPasskey.id,
                 userVerified: true,
                 credentialDeviceType: 'singleDevice',
                 credentialBackedUp: false,
@@ -103,7 +103,7 @@ describe('SimpleWebAuthnStrategy', () => {
             path: '/webauthn/login',
             body: {
                 response: mockAuthenticationResponse,
-                expectedChallenge: 'challenge123', // Passed externally now
+                expectedChallenge: 'challenge123',
             },
         } as unknown as Request;
 
@@ -112,7 +112,7 @@ describe('SimpleWebAuthnStrategy', () => {
 
         expect(verifyAuthenticationResponse).toHaveBeenCalledWith(expect.objectContaining({
             response: mockAuthenticationResponse,
-            expectedChallenge: 'challenge123', // Now passed externally
+            expectedChallenge: 'challenge123',
             expectedOrigin: 'https://example.com',
             expectedRPID: 'example.com',
             credential: {
@@ -124,12 +124,12 @@ describe('SimpleWebAuthnStrategy', () => {
             requireUserVerification: true,
         }));
         expect((strategy as any).updatePasskeyCounter).toHaveBeenCalledWith(mockPasskey.id, 11);
-        expect(success).toHaveBeenCalledWith(mockPasskey.webauthnUserID);
+        expect(success).toHaveBeenCalledWith(mockPasskey.userID);
         expect(fail).not.toHaveBeenCalled();
         expect(error).not.toHaveBeenCalled();
     });
 
-    it('should handle registration successfully', async () => {
+    it('should handle successful registration', async () => {
         const mockVerifiedResponse: VerifiedRegistrationResponse = {
             verified: true,
             registrationInfo: {
@@ -166,7 +166,7 @@ describe('SimpleWebAuthnStrategy', () => {
             path: '/webauthn/register',
             body: {
                 response: mockRegistrationResponse,
-                expectedChallenge: 'challenge123', // Passed externally now
+                expectedChallenge: 'challenge123',
             },
         } as unknown as Request;
 
@@ -175,7 +175,7 @@ describe('SimpleWebAuthnStrategy', () => {
 
         expect(verifyRegistrationResponse).toHaveBeenCalledWith(expect.objectContaining({
             response: mockRegistrationResponse,
-            expectedChallenge: 'challenge123', // Now passed externally
+            expectedChallenge: 'challenge123',
             expectedOrigin: 'https://example.com',
             expectedRPID: 'example.com',
             requireUserVerification: true,
@@ -186,7 +186,7 @@ describe('SimpleWebAuthnStrategy', () => {
                 id: 'credential123',
                 publicKey: expect.any(Uint8Array),
                 counter: 0,
-                webauthnUserID: mockUser.id,
+                webauthnUserID: 'credential123', // ✅ Ensure WebAuthn ID is correct
                 transports: ['usb'],
                 deviceType: 'singleDevice',
                 backedUp: false,
@@ -236,7 +236,7 @@ describe('SimpleWebAuthnStrategy', () => {
         expect(fail).toHaveBeenCalledWith({ message: "Registration verification failed" }, 403);
     });
 
-    it('should handle unknown action gracefully', async () => {
+    it('should handle unknown actions gracefully', async () => {
         const mockRequest = {
             path: '/webauthn/unknown',
             body: {},

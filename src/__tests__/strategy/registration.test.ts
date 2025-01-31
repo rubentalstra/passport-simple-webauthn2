@@ -116,11 +116,11 @@ describe('verifyRegistration', () => {
             id: 'credential123',
             publicKey: new Uint8Array([1, 2, 3]),
             counter: 0,
-            webauthnUserID: mockUser.id,  // ✅ Ensure we use the correct user ID
+            webauthnUserID: "credential123",  // ✅ Ensure we use the correct user ID
             transports: ['usb'],
             deviceType: 'singleDevice',
             backedUp: false,
-            user: mockUser,  // ✅ Correct user object is included
+            userID: 'user123',  // ✅ Correct user object is included
         }));
 
         expect(result).toEqual(mockVerifiedResponse);

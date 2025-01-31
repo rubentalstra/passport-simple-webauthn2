@@ -15,7 +15,7 @@ describe('verifyAuthentication', () => {
     const mockPasskey: Passkey = {
         id: 'credential123',
         publicKey: new Uint8Array([1, 2, 3]),
-        user: { id: 'user123', username: 'testuser' },
+        userID: 'user123',
         webauthnUserID: 'user123', // Should be Base64URLString
         counter: 10,
         transports: ['usb'],

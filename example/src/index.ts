@@ -54,7 +54,10 @@ passport.deserializeUser((id: string, done) => {
 
 // Define Strategy Options
 const strategyOptions: SimpleWebAuthnStrategyOptions = {
-    findPasskeyByCredentialID: async (credentialID: string) => passkeys.get(credentialID) || null,
+    findPasskeyByCredentialID: async (credentialID: string) => {
+        const decodedCredentialID = Buffer.from(credentialID, 'base64url').toString('utf-8');
+        return passkeys.get(decodedCredentialID) || null;
+    },
     updatePasskeyCounter: async (credentialID: string, newCounter: number) => {
         const passkey = passkeys.get(credentialID);
         if (passkey) {
@@ -62,7 +65,10 @@ const strategyOptions: SimpleWebAuthnStrategyOptions = {
             passkeys.set(credentialID, passkey);
         }
     },
-    findUserByWebAuthnID: async (webauthnUserID: string) => users.get(webauthnUserID) || null,
+    findUserByWebAuthnID: async (webauthnUserID: string) => {
+        const decodedUserId = Buffer.from(webauthnUserID, 'base64url').toString('utf-8');
+        return users.get(decodedUserId) || null;
+    },
     registerPasskey: async (user: UserModel, passkey: Passkey) => passkeys.set(passkey.id, passkey),
 };
 
@@ -87,13 +93,18 @@ app.post('/register', async (req, res, next) => {
         const { username } = req.body;
         if (!username) return res.status(400).send('Username is required');
 
-        const user: UserModel = {
-            id: Buffer.from(username).toString('base64url'), // Convert username to Base64URL
-            username,
-        };
+        // Generate a base64url-encoded user ID
+        const userId = Buffer.from(username).toString('base64url');
+
+        const user: UserModel = { id: userId, username };
         users.set(user.id, user);
 
+        // Generate WebAuthn registration options
         const registrationOptions = await generateRegistration(user);
+
+        // Save challenge using user.id instead of username
+        await saveChallenge(user.id, registrationOptions.challenge);
+
         res.json(registrationOptions);
     } catch (error) {
         next(error);
@@ -104,16 +115,38 @@ app.post('/register', async (req, res, next) => {
 app.post('/register/callback', async (req, res, next) => {
     try {
         const { response, username } = req.body;
-        if (!response || !username) return res.status(400).send("Invalid registration response");
+        if (!response || !username) {
+            return res.status(400).json({ error: "Invalid registration response" });
+        }
 
-        const expectedChallenge = await getChallenge(username);
-        if (!expectedChallenge) return res.status(400).send("Challenge expired or not found");
+        // Retrieve user by ID (since challenges are stored with user ID)
+        const userId = Buffer.from(username).toString('base64url');
+        const expectedChallenge = await getChallenge(userId);
 
-        const verification = await verifyRegistration(response, expectedChallenge, strategyOptions.findUserByWebAuthnID, strategyOptions.registerPasskey);
-        await clearChallenge(username);
-        res.send("Registration successful");
+        if (!expectedChallenge) {
+            return res.status(400).json({ error: "Challenge expired or not found" });
+        }
+
+        console.log("Received registration callback:", response);
+
+        // Verify WebAuthn registration
+        const verification = await verifyRegistration(
+            response,
+            expectedChallenge,
+            strategyOptions.findUserByWebAuthnID,
+            strategyOptions.registerPasskey
+        );
+
+        if (!verification.verified) {
+            return res.status(400).json({ error: "Verification failed" });
+        }
+
+        // Clear the challenge after successful verification
+        await clearChallenge(userId);
+        res.json({ success: true, message: "Registration successful" });
     } catch (error) {
-        next(error);
+        console.error("Error during registration callback:", error);
+        res.status(500).json({ error: "Server error during registration" });
     }
 });
 
@@ -129,15 +162,15 @@ app.post('/login/options', async (req, res) => {
 
     if (!user) return res.status(400).json({ error: "User not found" });
 
+    // Generate authentication options
     const options = await generateAuthenticationOptions({
         rpID: process.env.RP_ID || 'default-rp-id',
         allowCredentials: Array.from(passkeys.values())
             .filter(pk => pk.user.id === user.id)
-            .map(pk => ({
-                id: pk.id,
-            })),
+            .map(pk => ({ id: pk.id })),
     });
 
+    // Save challenge using user.id instead of username
     await saveChallenge(user.id, options.challenge);
     res.json(options);
 });
@@ -148,11 +181,28 @@ app.post('/login', async (req, res, next) => {
         const { username, response } = req.body;
         if (!username || !response) return res.status(400).send("Missing username or response");
 
-        const expectedChallenge = await getChallenge(username);
-        if (!expectedChallenge) return res.status(400).send("Challenge expired or not found");
+        // Retrieve user ID from username
+        const userId = Buffer.from(username).toString('base64url');
 
-        const verification = await verifyAuthentication(response, expectedChallenge, strategyOptions.findPasskeyByCredentialID, strategyOptions.updatePasskeyCounter);
-        await clearChallenge(username);
+        // Retrieve challenge using user ID
+        const expectedChallenge = await getChallenge(userId);
+        if (!expectedChallenge) {
+            return res.status(400).send("Challenge expired or not found");
+        }
+
+        // Verify authentication
+        const verification = await verifyAuthentication(
+            response,
+            expectedChallenge,
+            strategyOptions.findPasskeyByCredentialID,
+            strategyOptions.updatePasskeyCounter
+        );
+
+        if (!verification.verified) {
+            return res.status(400).json({ error: "Authentication failed" });
+        }
+
+        await clearChallenge(userId);
         res.redirect('/dashboard');
     } catch (error) {
         next(error);

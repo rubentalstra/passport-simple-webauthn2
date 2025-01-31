@@ -74,25 +74,26 @@ export const verifyRegistration = async (
       throw new Error("Registration verification failed");
     }
 
-    const webauthnUserID = verification.registrationInfo.credential.id;
-    if (!webauthnUserID) {
+    const credential = verification.registrationInfo.credential;
+    const webauthnUserID = credential.id;
+    if (!webauthnUserID || webauthnUserID.trim() === "") {
       throw new Error(
         "User handle (WebAuthn user ID) missing in registration response",
       );
     }
 
-    const user = await findUserByWebAuthnID(webauthnUserID);
+    let user = await findUserByWebAuthnID(webauthnUserID);
     if (!user) {
       throw new Error("User not found");
     }
 
     const passkey: Passkey = {
-      id: verification.registrationInfo.credential.id,
-      publicKey: verification.registrationInfo.credential.publicKey,
-      user,
+      id: credential.id,
+      publicKey: credential.publicKey,
+      userID: user.id, // ✅ Store only `userID`
+      webauthnUserID, // ✅ Store correct WebAuthn user ID
       counter: verification.registrationInfo.credential.counter,
-      webauthnUserID: user.id, // ✅ Store correct user ID
-      transports: verification.registrationInfo.credential.transports ?? [],
+      transports: credential.transports ?? [],
       deviceType: verification.registrationInfo.credentialDeviceType,
       backedUp: verification.registrationInfo.credentialBackedUp,
     };
