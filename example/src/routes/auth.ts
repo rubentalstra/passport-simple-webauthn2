@@ -56,18 +56,16 @@ passport.deserializeUser((userID: string, done) => {
 
 /**
  * 🔹 Register Page
- * Renders the registration HTML page.
  */
 router.get('/register', (req: Request, res: Response) => {
-    res.render('register'); // Ensure you have a view engine set up
+    res.render('register');
 });
 
 /**
  * 🔹 Generate WebAuthn Registration Challenge
- * Generates registration options and sends them to the client.
  */
 router.post('/register-challenge', async (req: Request, res: Response) => {
-    const { username } = req.body as { username: string };
+    const { username } = req.body;
     if (!username) {
         return res.status(400).json({ error: 'Username required' });
     }
@@ -79,7 +77,6 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
         users[userID] = user;
     }
 
-    // Generate WebAuthn registration options
     const options = await generateRegistrationOptions({
         rpName: process.env.RP_NAME || 'WebAuthn Demo',
         rpID: process.env.RP_ID || 'localhost',
@@ -87,14 +84,14 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
         userName: user.username,
         attestationType: 'none',
         excludeCredentials: user.passkeys.map((cred) => ({
-            id: cred.id,
+            id: Buffer.from(cred.id, 'base64url').toString('base64url'),
             type: 'public-key',
             transports: cred.transports || ['internal', 'usb', 'ble', 'nfc'],
         })),
         authenticatorSelection: {
-            userVerification: 'required', // Ensures biometrics are used
-            residentKey: 'required', // Allows persistent authentication
-            authenticatorAttachment: 'platform', // ✅ Forces Touch ID
+            userVerification: 'required',
+            residentKey: 'required',
+            authenticatorAttachment: 'platform',
         },
     });
 
@@ -104,13 +101,9 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
 
 /**
  * 🔹 WebAuthn Register Callback
- * Verifies the registration response and registers the new credential.
  */
 router.post('/register-callback', async (req: Request, res: Response) => {
-    const { username, credential } = req.body as {
-        username: string;
-        credential: RegistrationResponseJSON;
-    };
+    const { username, credential } = req.body;
 
     if (!username || !credential) {
         return res.status(400).json({ error: 'Invalid data' });
@@ -125,20 +118,10 @@ router.post('/register-callback', async (req: Request, res: Response) => {
     delete challenges[user.userID];
 
     try {
-        // Verify the registration response
         const verification = await verifyRegistrationResponse({
-            response: {
-                id: credential.id,
-                rawId: credential.rawId,
-                response: {
-                    clientDataJSON: credential.response.clientDataJSON,
-                    attestationObject: credential.response.attestationObject,
-                },
-                type: credential.type,
-                clientExtensionResults: credential.clientExtensionResults,
-            },
+            response: credential,
             expectedChallenge: storedChallenge,
-            expectedOrigin: `https://${process.env.RP_ID}`, // Ensure this matches your origin
+            expectedOrigin: `https://${process.env.RP_ID}`,
             expectedRPID: process.env.RP_ID || 'localhost',
             requireUserVerification: true,
         });
@@ -149,48 +132,39 @@ router.post('/register-callback', async (req: Request, res: Response) => {
 
         const { publicKey, id, counter, transports } = verification.registrationInfo.credential;
 
-        // Create a new credential record
         const newCredential: WebAuthnCredential = {
             id: bufferToBase64URL(id),
             publicKey: new Uint8Array(publicKey),
-            counter: counter,
-            transports: transports,
+            counter,
+            transports,
         };
 
-        // Register the new credential with the user
-        user.passkeys.push(newCredential);
+        users[user.userID].passkeys.push(newCredential);
+        console.log("Updated user data:", users[user.userID]);
 
-        // Optional: Log the new credential for debugging
-        console.log('New Credential Registered:', newCredential);
-
-        // Log the user in
         req.login(user, (err) => {
             if (err) {
-                console.error('Login error:', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
             res.json({ success: true });
         });
     } catch (error) {
-        console.error('Registration error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
 /**
  * 🔹 Login Page
- * Renders the login HTML page.
  */
 router.get('/login', (req: Request, res: Response) => {
-    res.render('login'); // Ensure you have a view engine set up
+    res.render('login');
 });
 
 /**
  * 🔹 Generate WebAuthn Authentication Challenge
- * Generates authentication options and sends them to the client.
  */
 router.post('/login-challenge', async (req: Request, res: Response) => {
-    const { username } = req.body as { username: string };
+    const { username } = req.body;
     if (!username) {
         return res.status(400).json({ error: 'Username required' });
     }
@@ -200,20 +174,16 @@ router.post('/login-challenge', async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'User not found' });
     }
 
-    // Ensure platform credentials (Touch ID) are prioritized
     const platformCredentials = user.passkeys.filter(cred => cred.transports?.includes('internal'));
 
     const options = await generateAuthenticationOptions({
         rpID: process.env.RP_ID || 'localhost',
         userVerification: 'required',
         allowCredentials: platformCredentials.length > 0 ? platformCredentials.map(cred => ({
-            id: cred.id,
+            id: Buffer.from(cred.id, 'base64url').toString('base64url'),
             type: 'public-key',
             transports: cred.transports,
-        })) : undefined, // Let the browser decide if no credentials are found
-        extensions: {
-            credProps: true,
-        },
+        })) : undefined,
     });
 
     challenges[user.userID] = bufferToBase64URL(options.challenge);
@@ -222,13 +192,9 @@ router.post('/login-challenge', async (req: Request, res: Response) => {
 
 /**
  * 🔹 Authenticate with WebAuthn
- * Verifies the authentication response and logs the user in.
  */
 router.post('/login-callback', async (req: Request, res: Response) => {
-    const { username, credential } = req.body as {
-        username: string;
-        credential: AuthenticationResponseJSON;
-    };
+    const { username, credential } = req.body;
 
     if (!username || !credential) {
         return res.status(400).json({ error: 'Invalid data' });
@@ -242,65 +208,38 @@ router.post('/login-callback', async (req: Request, res: Response) => {
     const storedChallenge = challenges[user.userID];
     delete challenges[user.userID];
 
+    console.log("Available passkeys for user:", user.passkeys);
+    console.log("Credential ID received:", credential.id);
+
+    const passkey = user.passkeys.find((p) => bufferToBase64URL(Buffer.from(p.id, 'base64url').toString('base64url')) === credential.id);
+
+    if (!passkey) {
+        return res.status(400).json({ error: 'Passkey not found' });
+    }
+
     try {
-        // Find the corresponding passkey
-        const passkey = user.passkeys.find((p) => p.id === credential.id);
-        if (!passkey) {
-            return res.status(400).json({ error: 'Passkey not found' });
-        }
-
-        // Prepare the response object for verification
-        const response: AuthenticationResponseJSON = {
-            id: credential.id,
-            rawId: credential.rawId,
-            response: {
-                authenticatorData: credential.response.authenticatorData,
-                clientDataJSON: credential.response.clientDataJSON,
-                signature: credential.response.signature,
-                userHandle: credential.response.userHandle,
-            },
-            type: credential.type,
-            clientExtensionResults: credential.clientExtensionResults,
-        };
-
-        // Prepare the WebAuthnCredential object
-        const webauthnCredential: WebAuthnCredential = {
-            id: passkey.id, // Base64URL string
-            publicKey: passkey.publicKey, // Uint8Array
-            counter: passkey.counter,
-            transports: passkey.transports,
-        };
-
-        // Verify the authentication response
         const verification = await verifyAuthenticationResponse({
-            response: response,
+            response: credential,
             expectedChallenge: storedChallenge,
-            expectedOrigin: `https://${process.env.RP_ID}`, // Ensure this matches your origin
+            expectedOrigin: `https://${process.env.RP_ID}`,
             expectedRPID: process.env.RP_ID || 'localhost',
-            credential: webauthnCredential,
+            credential: passkey,
             requireUserVerification: true,
         });
 
-        if (!verification.verified || !verification.authenticationInfo) {
+        if (!verification.verified) {
             return res.status(400).json({ error: 'Verification failed' });
         }
 
-        // Update the counter to prevent replay attacks
         passkey.counter = verification.authenticationInfo.newCounter;
 
-        // Optional: Log the verification info for debugging
-        console.log('Authentication Verified:', verification.authenticationInfo);
-
-        // Log the user in
         req.login(user, (err) => {
             if (err) {
-                console.error('Login error:', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
             }
             res.json({ success: true });
         });
     } catch (error) {
-        console.error('Authentication error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -316,14 +255,10 @@ router.get('/account', (req: Request, res: Response) => {
 
 /**
  * 🔹 Logout
- * Logs the user out and redirects to the home page.
  */
 router.get('/logout', (req: Request, res: Response) => {
     req.logout((err) => {
-        if (err) {
-            console.error('Logout error:', err);
-            return res.status(500).send('Error logging out.');
-        }
+        if (err) return res.status(500).send('Error logging out.');
         res.redirect('/');
     });
 });
