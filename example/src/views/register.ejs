@@ -27,7 +27,7 @@
             submitButton.disabled = true; // Prevent duplicate requests
 
             try {
-                const challengeResponse = await fetch('/register-challenge', {
+                const challengeResponse = await fetch('/register/challenge', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username }),
@@ -70,7 +70,7 @@
                     },
                 };
 
-                const registerCallbackResponse = await fetch('/register-callback', {
+                const registerCallbackResponse = await fetch('/register/callback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, credential: registrationResponse }),

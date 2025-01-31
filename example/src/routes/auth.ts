@@ -18,53 +18,32 @@ const router = express.Router();
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
-// 🛠️ FIX: Use an in-memory object to store users
+// 🛠️ In-memory storage for users and challenges
 const users: Record<string, { userID: string, username: string, passkeys: WebAuthnCredential[] }> = {};
 const challenges: Record<string, string> = {};
 
-/**
- * 🔹 Helper function: Get user by username
- */
-const getUserByUsername = (username: string) => Object.values(users).find(user => user.username === username);
+// 🔹 Helper Function: Get User
+const getUser = (identifier: string, byID = false) =>
+    Object.values(users).find(user => (byID ? user.userID === identifier : user.username === identifier));
 
-/**
- * 🔹 Helper function: Get user by ID
- */
-const getUserById = (userID: string) => users[userID];
-
-/**
- * 🔹 Passport serialization
- */
+// 🔹 Passport serialization
 passport.serializeUser((user: any, done) => done(null, user.userID));
-passport.deserializeUser((userID: string, done) => done(null, getUserById(userID) || false));
+passport.deserializeUser((userID: string, done) => done(null, users[userID] || false));
 
-/**
- * 🔹 Register Page
- */
-router.get('/', (req: Request, res: Response) => {
-    res.render('index');
-});
+// 🔹 Route Handlers
+router.get('/', (req: Request, res: Response) => res.render('index'));
+router.get('/register', (req: Request, res: Response) => res.render('register'));
+router.get('/login', (req: Request, res: Response) => res.render('login'));
 
-/**
- * 🔹 Register Page
- */
-router.get('/register', (req: Request, res: Response) => {
-    res.render('register');
-});
-
-
-/**
- * 🔹 Generate WebAuthn Registration Challenge
- */
-router.post('/register-challenge', async (req: Request, res: Response) => {
+// 🔹 WebAuthn Registration Challenge
+router.post('/register/challenge', async (req: Request, res: Response) => {
     const { username } = req.body;
     if (!username) return res.status(400).json({ error: 'Username required' });
 
-    let user = Object.values(users).find((u) => u.username === username);
+    let user = getUser(username);
     if (!user) {
-        const userID = uuidv4();
-        user = { userID, username, passkeys: [] };
-        users[userID] = user;
+        user = { userID: uuidv4(), username, passkeys: [] };
+        users[user.userID] = user;
     }
 
     const options = await generateRegistrationOptions({
@@ -73,8 +52,8 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
         userID: Buffer.from(user.userID, 'utf-8'),
         userName: user.username,
         attestationType: 'none',
-        excludeCredentials: user.passkeys.map((cred) => ({
-            id: Buffer.from(cred.id, 'base64url').toString('base64url'),
+        excludeCredentials: user.passkeys.map(cred => ({
+            id: bufferToBase64URL(cred.id),
             type: 'public-key',
             transports: cred.transports || ['internal', 'usb', 'ble', 'nfc'],
         })),
@@ -89,78 +68,43 @@ router.post('/register-challenge', async (req: Request, res: Response) => {
     res.json(serializeRegistrationOptions(options));
 });
 
-/**
- * 🔹 WebAuthn Register Callback
- */
-router.post('/register-callback', async (req: Request, res: Response) => {
+// 🔹 WebAuthn Register Callback
+router.post('/register/callback', async (req: Request, res: Response) => {
     const { username, credential } = req.body;
-    if (!username || !credential) return res.status(400).json({ error: 'Invalid data' });
-
-    const user = Object.values(users).find((u) => u.username === username);
+    const user = getUser(username);
     if (!user || !challenges[user.userID]) return res.status(400).json({ error: 'Invalid request' });
-
-    const storedChallenge = challenges[user.userID];
-    delete challenges[user.userID];
 
     try {
         const verification = await verifyRegistrationResponse({
             response: credential,
-            expectedChallenge: storedChallenge,
+            expectedChallenge: challenges[user.userID],
             expectedOrigin: `https://${process.env.RP_ID}`,
             expectedRPID: process.env.RP_ID || 'localhost',
             requireUserVerification: true,
         });
+
+        delete challenges[user.userID];
 
         if (!verification.verified || !verification.registrationInfo) {
             return res.status(400).json({ error: 'Verification failed' });
         }
 
         const { publicKey, id, counter, transports } = verification.registrationInfo.credential;
+        user.passkeys.push({ id: bufferToBase64URL(id), publicKey: new Uint8Array(publicKey), counter, transports });
 
-        const newCredential: WebAuthnCredential = {
-            id: bufferToBase64URL(id),
-            publicKey: new Uint8Array(publicKey),
-            counter,
-            transports,
-        };
-
-        users[user.userID].passkeys.push(newCredential);
-        console.log("Updated user data:", users[user.userID]);
-
-        req.login(user, (err) => {
-            if (err) {
-                console.error('Login error:', err);
-                return res.status(500).json({ error: 'Login failed' });
-            }
-            req.session.save((err) => {
-                if (err) {
-                    console.error('Session save error:', err);
-                    return res.status(500).json({ error: 'Session save failed' });
-                }
-                console.log('Session successfully saved:', req.session);
-                res.json({ success: true });
-            });
+        req.login(user, err => {
+            if (err) return res.status(500).json({ error: 'Login failed' });
+            req.session.save(() => res.json({ success: true }));
         });
-    } catch (error) {
+    } catch {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
-/**
- * 🔹 Login Page
- */
-router.get('/login', (req: Request, res: Response) => {
-    res.render('login');
-});
-
-/**
- * 🔹 Generate WebAuthn Authentication Challenge
- */
-router.post('/login-challenge', async (req: Request, res: Response) => {
+// 🔹 WebAuthn Authentication Challenge
+router.post('/login/challenge', async (req: Request, res: Response) => {
     const { username } = req.body;
-    if (!username) return res.status(400).json({ error: 'Username required' });
-
-    const user = Object.values(users).find((u) => u.username === username);
+    const user = getUser(username);
     if (!user) return res.status(400).json({ error: 'User not found' });
 
     const platformCredentials = user.passkeys.filter(cred => cred.transports?.includes('internal'));
@@ -168,28 +112,26 @@ router.post('/login-challenge', async (req: Request, res: Response) => {
     const options = await generateAuthenticationOptions({
         rpID: process.env.RP_ID || 'localhost',
         userVerification: 'required',
-        allowCredentials: platformCredentials.length > 0 ? platformCredentials.map(cred => ({
-            id: Buffer.from(cred.id, 'base64url').toString('base64url'),
-            type: 'public-key',
-            transports: cred.transports,
-        })) : undefined,
+        allowCredentials: platformCredentials.length > 0
+            ? platformCredentials.map(cred => ({
+                id: bufferToBase64URL(cred.id),
+                type: 'public-key',
+                transports: cred.transports,
+            }))
+            : undefined,
     });
 
     challenges[user.userID] = bufferToBase64URL(options.challenge);
     res.json(serializeAuthenticationOptions(options));
 });
 
-/**
- * 🔹 WebAuthn Login Callback
- */
-router.post('/login-callback', async (req: Request, res: Response) => {
+// 🔹 WebAuthn Login Callback
+router.post('/login/callback', async (req: Request, res: Response) => {
     const { username, credential } = req.body;
-    if (!username || !credential) return res.status(400).json({ error: 'Invalid data' });
-
-    const user = getUserByUsername(username);
+    const user = getUser(username);
     if (!user || !challenges[user.userID]) return res.status(400).json({ error: 'Invalid request' });
 
-    const passkey = user.passkeys.find((p) => p.id === bufferToBase64URL(Buffer.from(credential.id, 'base64url').toString('base64url')));
+    const passkey = user.passkeys.find(p => p.id === bufferToBase64URL(credential.id));
     if (!passkey) return res.status(400).json({ error: 'Passkey not found' });
 
     try {
@@ -207,39 +149,29 @@ router.post('/login-callback', async (req: Request, res: Response) => {
             requireUserVerification: true,
         });
 
-        if (!verification.verified) {
-            return res.status(400).json({ error: 'Verification failed' });
-        }
-
-        passkey.counter = verification.authenticationInfo.newCounter;
         delete challenges[user.userID];
 
-        req.login(user, (err) => {
+        if (!verification.verified) return res.status(400).json({ error: 'Verification failed' });
+
+        passkey.counter = verification.authenticationInfo.newCounter;
+        req.login(user, err => {
             if (err) return res.status(500).json({ error: 'Login failed' });
             req.session.save(() => res.json({ success: true }));
         });
-    } catch (error) {
+    } catch {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
-/**
- * 🔹 Account Page
- * Renders the account page for authenticated users.
- */
+// 🔹 Account Page
 router.get('/account', (req: Request, res: Response) => {
-    if (!req.isAuthenticated()) {
-        console.log('User is not authenticated. Redirecting...');
-        return res.redirect('/login');
-    }
+    if (!req.isAuthenticated()) return res.redirect('/login');
     res.render('account', { user: req.user });
 });
 
-/**
- * 🔹 Logout
- */
+// 🔹 Logout
 router.get('/logout', (req: Request, res: Response) => {
-    req.logout((err) => {
+    req.logout(err => {
         if (err) return res.status(500).send('Error logging out.');
         req.session.destroy(() => res.redirect('/'));
     });
