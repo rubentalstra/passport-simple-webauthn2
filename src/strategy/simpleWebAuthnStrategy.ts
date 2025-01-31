@@ -35,9 +35,9 @@ export class SimpleWebAuthnStrategy extends Strategy {
   /**
    * Authenticate method adhering to Passport's Strategy interface.
    * @param req - Express request object
-   * @param options - Optional parameters
+   * @param _options - Optional parameters
    */
-  authenticate(req: Request, options?: any): void {
+  authenticate(req: Request, _options?: any): void {
     const action = req.path.split("/").pop();
     if (action === "login") {
       this.handleAuthentication(req);
