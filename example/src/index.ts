@@ -6,9 +6,14 @@ import passport from 'passport';
 import path from 'path';
 import bodyParser from 'body-parser';
 import { users, passkeys } from './store';
-import {generateRegistration, SimpleWebAuthnStrategy, verifyRegistration} from "passport-simple-webauthn2";
+import {
+    generateRegistration,
+    SimpleWebAuthnStrategy,
+    registration,
+    UserModel,
+    Passkey, SimpleWebAuthnStrategyOptions
+} from "passport-simple-webauthn2";
 import dotenv from 'dotenv';
-import types {Passkey, SimpleWebAuthnStrategyOptions, UserModel} from "passport-simple-webauthn2";
 
 // Load environment variables
 dotenv.config();
@@ -122,7 +127,7 @@ app.post('/register/callback', async (req, res, next) => {
         }
 
         // Register the passkey
-        await verifyRegistration(response, async (webauthnUserID: string) => {
+        await registration(response, async (webauthnUserID: string) => {
             return users.get(webauthnUserID) || null;
         }, async (user: UserModel, passkey: Passkey) => {
             passkeys.set(passkey.id, passkey);
@@ -150,9 +155,13 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
 });
 
 // Logout Route
-app.get('/logout', (req, res) => {
-    req.logout();
-    res.redirect('/');
+app.get('/logout', (req, res, next) => {
+    req.logout((err) => {
+        if (err) {
+            return next(err);
+        }
+        res.redirect('/');
+    });
 });
 
 // Middleware to check authentication

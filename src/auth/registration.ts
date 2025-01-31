@@ -53,7 +53,7 @@ export const generateRegistration = async (
  * @param registerPasskey - Function to store the new passkey in the database.
  * @returns A promise that resolves to the verified registration response.
  */
-export const registration = async (
+export const verifyRegistration = async (
   response: RegistrationResponseJSON,
   findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>,
   registerPasskey: (user: UserModel, passkey: Passkey) => Promise<void>,
