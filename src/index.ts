@@ -7,7 +7,6 @@
  */
 
 export * from "./types";
-export * from "./strategy/simpleWebAuthnStrategy";
 export * from "./auth/registration";
+export * from "./strategy/simpleWebAuthnStrategy";
 export * from "./strategy/verifyAuthentication";
-export * from "../example/src/challengeStore";

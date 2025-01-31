@@ -29,5 +29,8 @@ export interface SimpleWebAuthnStrategyOptions {
     newCounter: number,
   ) => Promise<void>;
   findUserByWebAuthnID: (webauthnUserID: string) => Promise<UserModel | null>;
-  registerPasskey: (user: UserModel, passkey: Passkey) => Promise<void>;
+  registerPasskey: (
+    user: UserModel,
+    passkey: Passkey,
+  ) => Promise<Map<string, Passkey>>;
 }

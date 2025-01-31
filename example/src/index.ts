@@ -5,17 +5,15 @@ import path from 'path';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import { users, passkeys } from './store/store';
-import {
-    generateRegistration,
-    verifyRegistration,
-    verifyAuthentication,
-    SimpleWebAuthnStrategy,
-    UserModel,
-    Passkey,
-    SimpleWebAuthnStrategyOptions,
-} from "passport-simple-webauthn2";
 import { generateAuthenticationOptions } from "@simplewebauthn/server";
 import {clearChallenge, getChallenge, saveChallenge} from "./challengeStore";
+import {
+    generateRegistration,
+    Passkey,
+    SimpleWebAuthnStrategy,
+    SimpleWebAuthnStrategyOptions,
+    UserModel, verifyAuthentication, verifyRegistration
+} from "passport-simple-webauthn2";
 
 // Load environment variables
 dotenv.config();
