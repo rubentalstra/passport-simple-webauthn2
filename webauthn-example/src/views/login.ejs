@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <script>
+        function base64URLToArrayBuffer(base64url) {
+            const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
+            const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const binary = atob(base64);
+            return Uint8Array.from(binary, (c) => c.charCodeAt(0)).buffer;
+        }
+
+        function arrayBufferToBase64URL(buffer) {
+            return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        async function startWebAuthnAuthentication(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const submitButton = document.getElementById('login-btn');
+
+            if (!username) return alert('Username is required!');
+
+            submitButton.disabled = true;
+
+            try {
+                const challengeResponse = await fetch('/auth/login/challenge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username }),
+                });
+
+                const options = await challengeResponse.json();
+                options.challenge = base64URLToArrayBuffer(options.challenge);
+
+                if (options.allowCredentials) {
+                    options.allowCredentials = options.allowCredentials.map(cred => ({
+                        ...cred,
+                        id: base64URLToArrayBuffer(cred.id),
+                    }));
+                }
+
+                const credential = await navigator.credentials.get({ publicKey: options });
+
+                if (!credential) throw new Error('Failed to get credential');
+
+                const authenticationResponse = {
+                    id: credential.id,
+                    rawId: arrayBufferToBase64URL(credential.rawId),
+                    type: credential.type,
+                    response: {
+                        authenticatorData: arrayBufferToBase64URL(credential.response.authenticatorData),
+                        clientDataJSON: arrayBufferToBase64URL(credential.response.clientDataJSON),
+                        signature: arrayBufferToBase64URL(credential.response.signature),
+                        userHandle: credential.response.userHandle
+                            ? arrayBufferToBase64URL(credential.response.userHandle)
+                            : null,
+                    },
+                };
+
+                const loginCallbackResponse = await fetch('/auth/login/callback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, credential: authenticationResponse }),
+                });
+
+                const result = await loginCallbackResponse.json();
+                if (result.success) {
+                    window.location.href = '/account';
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                alert('Authentication failed: ' + error.message);
+            } finally {
+                submitButton.disabled = false;
+            }
+        }
+    </script>
+</head>
+<body>
+<h1>Login</h1>
+<form onsubmit="startWebAuthnAuthentication(event)">
+    <input type="text" id="username" placeholder="Enter Username" required>
+    <button type="submit" id="login-btn">Login</button>
+</form>
+</body>
+</html>

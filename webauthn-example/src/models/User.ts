@@ -17,7 +17,11 @@ const UserSchema = new Schema<IUser>({
     passkeys: [
         {
             id: { type: String, required: true },
-            publicKey: { type: Buffer, required: true },
+            publicKey: {
+                type: Buffer,
+                required: true,
+                set: (val: Uint8Array | Buffer) => Buffer.isBuffer(val) ? val : Buffer.from(val)
+            },
             counter: { type: Number, required: true },
             transports: { type: [String], required: true },
         },

@@ -1,5 +1,13 @@
-export const bufferToBase64URL = (buffer: any): string =>
-  Buffer.from(buffer).toString("base64url");
+import type { Base64URLString } from "../example/src/types";
+
+/**
+ * Converts an ArrayBuffer to a Base64URL-encoded string.
+ * @param buffer - The ArrayBuffer to convert.
+ * @returns A Base64URL-encoded string.
+ */
+export function bufferToBase64URL(buffer: Base64URLString): Base64URLString {
+  return Buffer.from(buffer).toString("base64url");
+}
 
 export const serializeAuthenticationOptions = (
   options: Record<string, any>,

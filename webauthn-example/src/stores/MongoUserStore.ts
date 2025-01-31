@@ -6,9 +6,9 @@ export class MongoUserStore implements UserStore {
         try {
             const user = await User.findOne(
                 byID ? { userID: identifier } : { username: identifier }
-            )
-                .lean() // Return a plain JavaScript object instead of a Mongoose document
-                .exec();
+            ).lean().exec();
+
+            console.log("🔹 Fetched User Data:", user);
             return user as WebAuthnUser | undefined;
         } catch (error) {
             console.error(`Error fetching user (${byID ? "userID" : "username"}: ${identifier}):`, error);
@@ -18,6 +18,12 @@ export class MongoUserStore implements UserStore {
 
     async save(user: WebAuthnUser): Promise<void> {
         try {
+            // Convert Uint8Array to Buffer
+            user.passkeys = user.passkeys.map(passkey => ({
+                ...passkey,
+                publicKey: Buffer.from(passkey.publicKey)  // ✅ Ensure correct conversion
+            }));
+
             await User.findOneAndUpdate(
                 { userID: user.userID },
                 user,

@@ -121,8 +121,10 @@ export class WebAuthnStrategy extends PassportStrategy {
 
       await this.userStore.save(user);
       return user;
-    } catch {
-      throw new Error("Registration failed");
+    } catch (error) {
+      throw new Error(
+        error instanceof Error ? error.message : "Registration failed",
+      );
     }
   }
 
@@ -195,8 +197,8 @@ export class WebAuthnStrategy extends PassportStrategy {
       passkey.counter = verification.authenticationInfo.newCounter;
       await this.userStore.save(user);
       return user;
-    } catch {
-      throw new Error("Login failed");
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : "Login failed");
     }
   }
 

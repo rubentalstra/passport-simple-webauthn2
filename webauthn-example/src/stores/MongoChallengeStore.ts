@@ -5,6 +5,7 @@ export class MongoChallengeStore implements ChallengeStore {
     async get(userID: string): Promise<string | undefined> {
         try {
             const challenge = await Challenge.findOne({ userID }).lean().exec();
+            console.log("🔹 Fetched Challenge for", userID, ":", challenge);
             return challenge?.challenge;
         } catch (error) {
             console.error(`Error fetching challenge for userID ${userID}:`, error);

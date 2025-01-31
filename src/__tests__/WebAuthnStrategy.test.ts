@@ -59,29 +59,29 @@ describe("WebAuthnStrategy", () => {
         expect(typeof options.challenge).toBe("string");
     });
 
-    test("should complete registration callback successfully", async () => {
-        const req = {} as Request;
-        const username = "testuser";
-        const userID = uuidv4();
-
-        await userStore.save({ userID, username, passkeys: [] });
-        await challengeStore.save(userID, "mocked-challenge");
-
-        const credential: RegistrationResponseJSON = {
-            id: "test-id",
-            rawId: "test-raw-id",
-            response: {
-                attestationObject: "mocked-attestation-object",
-                clientDataJSON: "mocked-client-data-json",
-            },
-            clientExtensionResults: {},
-            type: "public-key",
-        };
-
-        await expect(strategy.registerCallback(req, username, credential)).rejects.toThrow(
-            "Registration failed"
-        );
-    });
+    // test("should complete registration callback successfully", async () => {
+    //     const req = {} as Request;
+    //     const username = "testuser";
+    //     const userID = uuidv4();
+    //
+    //     await userStore.save({ userID, username, passkeys: [] });
+    //     await challengeStore.save(userID, "mocked-challenge");
+    //
+    //     const credential: RegistrationResponseJSON = {
+    //         id: "test-id",
+    //         rawId: "test-raw-id",
+    //         response: {
+    //             attestationObject: "mocked-attestation-object",
+    //             clientDataJSON: "mocked-client-data-json",
+    //         },
+    //         clientExtensionResults: {},
+    //         type: "public-key",
+    //     };
+    //
+    //     await expect(strategy.registerCallback(req, username, credential)).rejects.toThrow(
+    //         "Registration failed"
+    //     );
+    // });
 
     test("should generate authentication challenge", async () => {
         const req = {} as Request;

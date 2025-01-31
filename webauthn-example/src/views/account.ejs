@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Your Account</title>
+</head>
+<body>
+<h1>Your Account</h1>
+<h2>Passkeys</h2>
+<ul id="passkeys-list">
+    <% if (passkeys.length > 0) { %>
+        <% passkeys.forEach(passkey => { %>
+            <li>ID: <%= passkey.id %>, Counter: <%= passkey.counter %></li>
+        <% }); %>
+    <% } else { %>
+        <li>No passkeys found.</li>
+    <% } %>
+</ul>
+
+<form action="/logout" method="POST">
+    <button type="submit">Logout</button>
+</form>
+</body>
+</html>
