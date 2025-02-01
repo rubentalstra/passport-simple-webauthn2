@@ -7,6 +7,7 @@ import {
 } from "@simplewebauthn/server";
 import type { Request } from "express";
 import { v4 as uuidv4 } from "uuid";
+import winston from "winston";
 import {
   bufferToBase64URL,
   serializeAuthenticationOptions,
@@ -26,18 +27,54 @@ export class WebAuthnStrategy extends PassportStrategy {
   private readonly rpName: string;
   private readonly userStore: UserStore;
   private readonly challengeStore: ChallengeStore;
+  private readonly debug: boolean;
+  private readonly logger: winston.Logger;
 
   constructor(options: {
     rpID: string;
     rpName: string;
     userStore: UserStore;
     challengeStore: ChallengeStore;
+    debug?: boolean;
   }) {
     super();
     this.rpID = options.rpID;
     this.rpName = options.rpName;
     this.userStore = options.userStore;
     this.challengeStore = options.challengeStore;
+    this.debug = options.debug ?? false;
+
+    // Create a Winston logger instance.
+    this.logger = winston.createLogger({
+      level: this.debug ? "debug" : "info",
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.printf(({ timestamp, level, message, ...meta }) => {
+          const metaString = Object.keys(meta).length
+            ? JSON.stringify(meta)
+            : "";
+          return `${timestamp} [WebAuthnStrategy] ${level}: ${message} ${metaString}`;
+        }),
+      ),
+      transports: [new winston.transports.Console()],
+    });
+
+    // Log initialization info
+    this.logger.info("WebAuthnStrategy initialized", {
+      rpID: this.rpID,
+      rpName: this.rpName,
+      debug: this.debug,
+    });
+    this.debugLog("Debug logging enabled");
+  }
+
+  /**
+   * Logs messages if debug mode is enabled.
+   */
+  private debugLog(message: string, ...optionalParams: any[]): void {
+    if (this.debug) {
+      this.logger.debug(message, ...optionalParams);
+    }
   }
 
   private async getUser(
@@ -51,14 +88,23 @@ export class WebAuthnStrategy extends PassportStrategy {
     req: Request,
     username: string,
   ): Promise<Record<string, unknown>> {
+    this.debugLog(`registerChallenge called for username: ${username}`);
+
     if (!username) throw new Error("Username required");
 
     let user = await this.getUser(username);
     if (!user) {
+      this.debugLog(
+        `User not found. Creating new user for username: ${username}`,
+      );
       user = { userID: uuidv4(), username, passkeys: [] };
       await this.userStore.save(user);
+      this.debugLog(`New user created with userID: ${user.userID}`);
+    } else {
+      this.debugLog(`User found with userID: ${user.userID}`);
     }
 
+    this.debugLog("Generating registration options");
     const options = await generateRegistrationOptions({
       rpName: this.rpName || "WebAuthn Demo",
       rpID: this.rpID || "localhost",
@@ -76,13 +122,25 @@ export class WebAuthnStrategy extends PassportStrategy {
         authenticatorAttachment: "platform",
       },
     });
+    this.debugLog("Registration options generated", {
+      challenge: bufferToBase64URL(options.challenge),
+      options,
+    });
 
     // Save the challenge (converted to a base64url string)
-    await this.challengeStore.save(
-      user.userID,
-      bufferToBase64URL(options.challenge),
+    const challengeStr = bufferToBase64URL(options.challenge);
+    await this.challengeStore.save(user.userID, challengeStr);
+    this.debugLog(`Challenge saved for userID ${user.userID}: ${challengeStr}`);
+
+    const serializedOptions = serializeRegistrationOptions(options);
+    this.debugLog("Serialized registration options", serializedOptions);
+
+    // Info log indicating that the registration challenge has been generated
+    this.logger.info(
+      `Registration challenge generated for user ${user.username} (ID: ${user.userID})`,
     );
-    return serializeRegistrationOptions(options);
+
+    return serializedOptions;
   }
 
   async registerCallback(
@@ -90,13 +148,25 @@ export class WebAuthnStrategy extends PassportStrategy {
     username: string,
     credential: RegistrationResponseJSON,
   ): Promise<WebAuthnUser> {
+    this.debugLog(`registerCallback called for username: ${username}`);
     const user = await this.getUser(username);
-    if (!user) throw new Error("User not found");
+    if (!user) {
+      this.logger.error(`User not found for username: ${username}`);
+      throw new Error("User not found");
+    }
+    this.debugLog(`User found with userID: ${user.userID}`);
 
     const challenge = await this.challengeStore.get(user.userID);
-    if (!challenge) throw new Error("Challenge not found");
+    if (!challenge) {
+      this.logger.error(`Challenge not found for userID: ${user.userID}`);
+      throw new Error("Challenge not found");
+    }
+    this.debugLog(
+      `Challenge retrieved for userID ${user.userID}: ${challenge}`,
+    );
 
     try {
+      this.debugLog("Verifying registration response", credential);
       const verification = await verifyRegistrationResponse({
         response: credential,
         expectedChallenge: challenge,
@@ -107,15 +177,23 @@ export class WebAuthnStrategy extends PassportStrategy {
         expectedRPID: this.rpID || "localhost",
         requireUserVerification: true,
       });
+      this.debugLog("Registration response verification result", verification);
 
       await this.challengeStore.delete(user.userID);
+      this.debugLog(`Challenge deleted for userID ${user.userID}`);
 
       if (!verification.verified || !verification.registrationInfo) {
+        this.logger.error("Registration verification failed");
         throw new Error("Verification failed");
       }
 
       const { publicKey, id, counter, transports } =
         verification.registrationInfo.credential;
+      this.debugLog("Storing new passkey", {
+        id: bufferToBase64URL(id),
+        counter,
+        transports,
+      });
 
       // Store id as a base64url string and the public key as a Buffer.
       user.passkeys.push({
@@ -126,11 +204,19 @@ export class WebAuthnStrategy extends PassportStrategy {
       });
 
       await this.userStore.save(user);
+      this.debugLog(
+        `User updated and saved with new passkey, userID: ${user.userID}`,
+      );
+      this.logger.info(
+        `User ${user.username} (ID: ${user.userID}) successfully registered.`,
+      );
       return user;
     } catch (error) {
-      throw new Error(
-        error instanceof Error ? error.message : "Registration failed",
-      );
+      const errorMsg =
+        error instanceof Error ? error.message : "Registration failed";
+      this.logger.error(`Error during registration callback: ${errorMsg}`);
+      this.debugLog(`Error during registration callback: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
   }
 
@@ -138,13 +224,20 @@ export class WebAuthnStrategy extends PassportStrategy {
     req: Request,
     username: string,
   ): Promise<Record<string, unknown>> {
+    this.debugLog(`loginChallenge called for username: ${username}`);
     const user = await this.getUser(username);
-    if (!user) throw new Error("User not found");
+    if (!user) {
+      this.logger.error(`User not found for username: ${username}`);
+      throw new Error("User not found");
+    }
+    this.debugLog(`User found with userID: ${user.userID}`);
 
     const platformCredentials = user.passkeys.filter((cred) =>
       cred.transports?.includes("internal"),
     );
+    this.debugLog("Filtered platform credentials", platformCredentials);
 
+    this.debugLog("Generating authentication options");
     const options = await generateAuthenticationOptions({
       rpID: this.rpID || "localhost",
       userVerification: "required",
@@ -157,12 +250,22 @@ export class WebAuthnStrategy extends PassportStrategy {
             }))
           : undefined,
     });
+    this.debugLog("Authentication options generated", {
+      challenge: bufferToBase64URL(options.challenge),
+      options,
+    });
 
-    await this.challengeStore.save(
-      user.userID,
-      bufferToBase64URL(options.challenge),
+    const challengeStr = bufferToBase64URL(options.challenge);
+    await this.challengeStore.save(user.userID, challengeStr);
+    this.debugLog(`Challenge saved for userID ${user.userID}: ${challengeStr}`);
+
+    const serializedOptions = serializeAuthenticationOptions(options);
+    this.debugLog("Serialized authentication options", serializedOptions);
+
+    this.logger.info(
+      `Login challenge generated for user ${user.username} (ID: ${user.userID})`,
     );
-    return serializeAuthenticationOptions(options);
+    return serializedOptions;
   }
 
   async loginCallback(
@@ -170,21 +273,40 @@ export class WebAuthnStrategy extends PassportStrategy {
     username: string,
     credential: AuthenticationResponseJSON,
   ): Promise<WebAuthnUser> {
+    this.debugLog(`loginCallback called for username: ${username}`);
     const user = await this.getUser(username);
-    if (!user) throw new Error("User not found");
+    if (!user) {
+      this.logger.error(`User not found for username: ${username}`);
+      throw new Error("User not found");
+    }
+    this.debugLog(`User found with userID: ${user.userID}`);
 
     const challenge = await this.challengeStore.get(user.userID);
-    if (!challenge) throw new Error("Challenge not found");
+    if (!challenge) {
+      this.logger.error(`Challenge not found for userID: ${user.userID}`);
+      throw new Error("Challenge not found");
+    }
+    this.debugLog(
+      `Challenge retrieved for userID ${user.userID}: ${challenge}`,
+    );
 
-    // Compare directly (do not re-encode the credential id)
-    const passkey = user.passkeys.find((p) => p.id === credential.id);
-    if (!passkey) throw new Error("Passkey not found");
+    // Locate the passkey by comparing with the base64url-encoded credential id.
+    const passkey = user.passkeys.find(
+      (p) => p.id === bufferToBase64URL(credential.id),
+    );
+    if (!passkey) {
+      const errMsg = `Passkey not found for credential id: ${bufferToBase64URL(credential.id)}`;
+      this.logger.error(errMsg);
+      this.debugLog(errMsg);
+      throw new Error("Passkey not found");
+    }
+    this.debugLog("Passkey found", passkey);
 
     try {
+      this.debugLog("Verifying authentication response", credential);
       const verification = await verifyAuthenticationResponse({
         response: credential,
         expectedChallenge: challenge,
-        // Adjust expected origin based on environment.
         expectedOrigin:
           process.env.NODE_ENV === "development"
             ? `http://${this.rpID}`
@@ -192,25 +314,41 @@ export class WebAuthnStrategy extends PassportStrategy {
         expectedRPID: this.rpID,
         credential: {
           id: passkey.id,
-          // Ensure that publicKey is passed as a Buffer
           publicKey: Buffer.from(passkey.publicKey),
           counter: passkey.counter,
           transports: passkey.transports,
         },
         requireUserVerification: true,
       });
+      this.debugLog(
+        "Authentication response verification result",
+        verification,
+      );
 
       await this.challengeStore.delete(user.userID);
+      this.debugLog(`Challenge deleted for userID ${user.userID}`);
 
-      if (!verification.verified) throw new Error("Verification failed");
+      if (!verification.verified) {
+        this.logger.error("Authentication verification failed");
+        this.debugLog("Authentication verification failed");
+        throw new Error("Verification failed");
+      }
 
       // Update the passkey counter.
       passkey.counter = verification.authenticationInfo.newCounter;
       await this.userStore.save(user);
-
+      this.debugLog(
+        `User updated and saved with updated passkey counter, userID: ${user.userID}`,
+      );
+      this.logger.info(
+        `User ${user.username} (ID: ${user.userID}) successfully logged in.`,
+      );
       return user;
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : "Login failed");
+      const errorMsg = error instanceof Error ? error.message : "Login failed";
+      this.logger.error(`Error during login callback: ${errorMsg}`);
+      this.debugLog(`Error during login callback: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
   }
 
