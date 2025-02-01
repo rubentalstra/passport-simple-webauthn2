@@ -59,7 +59,6 @@ export class WebAuthnStrategy extends PassportStrategy {
       transports: [new winston.transports.Console()],
     });
 
-    // Log initialization info
     this.logger.info("WebAuthnStrategy initialized", {
       rpID: this.rpID,
       rpName: this.rpName,
@@ -135,7 +134,6 @@ export class WebAuthnStrategy extends PassportStrategy {
     const serializedOptions = serializeRegistrationOptions(options);
     this.debugLog("Serialized registration options", serializedOptions);
 
-    // Info log indicating that the registration challenge has been generated
     this.logger.info(
       `Registration challenge generated for user ${user.username} (ID: ${user.userID})`,
     );
@@ -195,7 +193,7 @@ export class WebAuthnStrategy extends PassportStrategy {
         transports,
       });
 
-      // Store id as a base64url string and the public key as a Buffer.
+      // Save the public key as a Uint8Array
       user.passkeys.push({
         id: bufferToBase64URL(id),
         publicKey: new Uint8Array(publicKey),
@@ -295,7 +293,9 @@ export class WebAuthnStrategy extends PassportStrategy {
       (p) => p.id === bufferToBase64URL(credential.id),
     );
     if (!passkey) {
-      const errMsg = `Passkey not found for credential id: ${bufferToBase64URL(credential.id)}`;
+      const errMsg = `Passkey not found for credential id: ${bufferToBase64URL(
+        credential.id,
+      )}`;
       this.logger.error(errMsg);
       this.debugLog(errMsg);
       throw new Error("Passkey not found");
@@ -303,6 +303,13 @@ export class WebAuthnStrategy extends PassportStrategy {
     this.debugLog("Passkey found", passkey);
 
     try {
+      // Convert the stored publicKey to a Uint8Array.
+      // If it is stored as a base64 string, convert it; otherwise assume it’s already a Uint8Array.
+      const publicKeyUint8: Uint8Array =
+        typeof passkey.publicKey === "string"
+          ? new Uint8Array(Buffer.from(passkey.publicKey, "base64"))
+          : passkey.publicKey;
+
       this.debugLog("Verifying authentication response", credential);
       const verification = await verifyAuthenticationResponse({
         response: credential,
@@ -314,7 +321,7 @@ export class WebAuthnStrategy extends PassportStrategy {
         expectedRPID: this.rpID,
         credential: {
           id: passkey.id,
-          publicKey: Buffer.from(passkey.publicKey),
+          publicKey: publicKeyUint8,
           counter: passkey.counter,
           transports: passkey.transports,
         },

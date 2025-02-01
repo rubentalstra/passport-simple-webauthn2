@@ -13,6 +13,7 @@ const webAuthnStrategy = new WebAuthnStrategy({
     rpName: process.env.RP_NAME || "My WebAuthn App",
     userStore,
     challengeStore,
+    debug: true,
 });
 
 passport.use(webAuthnStrategy);
