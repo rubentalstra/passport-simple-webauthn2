@@ -44,13 +44,17 @@ app.use(passport.session());
 const userStore = new MongoUserStore();
 const challengeStore = new MongoChallengeStore();
 
-// Instead of storing only a userID, we now store the entire user object.
 passport.serializeUser((user: any, done) => {
-    done(null, user);
+    done(null, user.id);
 });
 
-passport.deserializeUser((user: any, done) => {
-    done(null, user);
+passport.deserializeUser(async (id: string, done) => {
+    try {
+        const user = await userStore.get(id, true);
+        done(null, user);
+    } catch (err) {
+        done(err);
+    }
 });
 
 // Initialize and use the WebAuthn strategy

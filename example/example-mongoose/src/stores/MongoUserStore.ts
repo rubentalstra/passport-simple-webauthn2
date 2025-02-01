@@ -3,36 +3,46 @@ import type { UserStore, WebAuthnUser } from "../../../../dist/types";
 
 export class MongoUserStore implements UserStore {
     async get(identifier: string, byID = false): Promise<WebAuthnUser | undefined> {
-        try {
-            return await User.findOne(byID ? { userID: identifier } : { username: identifier })
-                .lean()
-                .exec() as WebAuthnUser | undefined;
-        } catch (error) {
-            console.error(
-                `❌ Error fetching user (${byID ? "userID" : "username"}: ${identifier}):`,
-                error
-            );
-            return undefined;
+        const query = byID ? { _id: identifier } : { username: identifier };
+        const user = await User.findOne(query).lean().exec();
+        if (user) {
+            // Map MongoDB's _id to our id field.
+            return {
+                id: user._id.toString(),
+                username: user.username,
+                passkeys: user.passkeys,
+            };
         }
+        return undefined;
     }
 
-    async save(user: WebAuthnUser): Promise<void> {
-        try {
-            // Upsert the user. When passkeys are provided, filter out duplicates.
-            const uniquePasskeys = user.passkeys.reduce((acc: typeof user.passkeys, passkey) => {
-                if (!acc.find((p) => p.id === passkey.id)) {
-                    acc.push(passkey);
-                }
-                return acc;
-            }, []);
-
-            await User.findOneAndUpdate(
-                { userID: user.userID },
-                { userID: user.userID, username: user.username, passkeys: uniquePasskeys },
-                { upsert: true, new: true, setDefaultsOnInsert: true }
+    async save(user: WebAuthnUser): Promise<WebAuthnUser> {
+        // If the user doesn't have an id, let the database generate one.
+        if (!user.id) {
+            const createdUser = await User.create({
+                username: user.username,
+                passkeys: user.passkeys,
+            });
+            return {
+                id: createdUser.id.toString(),
+                username: createdUser.username,
+                passkeys: createdUser.passkeys,
+            };
+        } else {
+            // Update the existing document.
+            const updatedUser = await User.findByIdAndUpdate(
+                user.id,
+                { username: user.username, passkeys: user.passkeys },
+                { new: true, upsert: true }
             ).exec();
-        } catch (error) {
-            console.error(`❌ Error saving user (${user.userID}):`, error);
+            if (!updatedUser) {
+                throw new Error("Failed to update user");
+            }
+            return {
+                id: updatedUser.id.toString(),
+                username: updatedUser.username,
+                passkeys: updatedUser.passkeys,
+            };
         }
     }
 }

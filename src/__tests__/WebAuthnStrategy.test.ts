@@ -2,35 +2,43 @@ import { WebAuthnStrategy } from "../index";
 import type { WebAuthnUser, UserStore, ChallengeStore } from "../types";
 import { Request } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
+import {
+    AuthenticationResponseJSON,
+    RegistrationResponseJSON,
+} from "@simplewebauthn/server";
 
 class MockUserStore implements UserStore {
     private users: Record<string, WebAuthnUser> = {};
 
     async get(identifier: string, byID = false): Promise<WebAuthnUser | undefined> {
         return Object.values(this.users).find(user =>
-            byID ? user.userID === identifier : user.username === identifier
+            byID ? user.id === identifier : user.username === identifier
         );
     }
 
-    async save(user: WebAuthnUser): Promise<void> {
-        this.users[user.userID] = user;
+    async save(user: WebAuthnUser): Promise<WebAuthnUser> {
+        // If an id isn't provided, generate one.
+        if (!user.id) {
+            user.id = uuidv4();
+        }
+        this.users[user.id] = user;
+        return user;
     }
 }
 
 class MockChallengeStore implements ChallengeStore {
     private challenges: Record<string, string> = {};
 
-    async get(userID: string): Promise<string | undefined> {
-        return this.challenges[userID];
+    async get(userId: string): Promise<string | undefined> {
+        return this.challenges[userId];
     }
 
-    async save(userID: string, challenge: string): Promise<void> {
-        this.challenges[userID] = challenge;
+    async save(userId: string, challenge: string): Promise<void> {
+        this.challenges[userId] = challenge;
     }
 
-    async delete(userID: string): Promise<void> {
-        delete this.challenges[userID];
+    async delete(userId: string): Promise<void> {
+        delete this.challenges[userId];
     }
 }
 
@@ -65,7 +73,7 @@ describe("WebAuthnStrategy", () => {
         const username = "testuser";
         const userID = uuidv4();
 
-        await userStore.save({ userID, username, passkeys: [] });
+        await userStore.save({ id: userID, username, passkeys: [] });
         await challengeStore.save(userID, "mocked-challenge");
 
         const credential: RegistrationResponseJSON = {
@@ -91,12 +99,12 @@ describe("WebAuthnStrategy", () => {
         const userID = uuidv4();
 
         await userStore.save({
-            userID,
+            id: userID,
             username,
             passkeys: [
                 {
                     id: "test-id",
-                    publicKey: new Uint8Array(),
+                    publicKey: new Uint8Array(), // For testing, an empty Uint8Array
                     counter: 0,
                     transports: ["internal"],
                 },
@@ -148,7 +156,7 @@ describe("WebAuthnStrategy", () => {
         const userID = uuidv4();
 
         await userStore.save({
-            userID,
+            id: userID,
             username,
             passkeys: [
                 {
@@ -184,7 +192,7 @@ describe("WebAuthnStrategy", () => {
         const username = "testuser";
         const userID = uuidv4();
 
-        await userStore.save({ userID, username, passkeys: [] });
+        await userStore.save({ id: userID, username, passkeys: [] });
         await challengeStore.save(userID, "mocked-challenge");
 
         const credential: AuthenticationResponseJSON = {
@@ -205,6 +213,7 @@ describe("WebAuthnStrategy", () => {
         );
     });
 
+    // Uncomment if needed:
     // test("should reject calls to authenticate() with an invalid path", async () => {
     //     // Using a path that doesn't contain "register" or "login" will trigger the error.
     //     const req = { path: "/invalid" } as Request;

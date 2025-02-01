@@ -1,10 +1,10 @@
-<!-- views/login.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Login</title>
     <script>
+        // Utility functions for base64url conversion
         function base64URLToArrayBuffer(base64url) {
             const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
             const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -19,39 +19,41 @@
 
         async function startWebAuthnAuthentication(event) {
             event.preventDefault();
-            const username = document.getElementById('username').value;
+            const username = document.getElementById('username').value.trim();
             const submitButton = document.getElementById('login-btn');
 
             if (!username) return alert('Username is required!');
-
-            submitButton.disabled = true; // Prevent duplicate requests
+            submitButton.disabled = true;
 
             try {
-                const challengeResponse = await fetch('/login/challenge', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username }),
+                // Step 1: Request a login challenge (GET)
+                const challengeResponse = await fetch(`/webauthn/login?username=${encodeURIComponent(username)}`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
                 });
 
                 if (!challengeResponse.ok) {
                     const error = await challengeResponse.json();
-                    throw new Error(error.error);
+                    throw new Error(error.error || 'Failed to get challenge');
                 }
 
                 const options = await challengeResponse.json();
+                // Convert challenge from base64url to ArrayBuffer
                 options.challenge = base64URLToArrayBuffer(options.challenge);
 
+                // Convert allowed credential ids if present
                 if (options.allowCredentials) {
                     options.allowCredentials = options.allowCredentials.map(cred => ({
                         ...cred,
-                        id: base64URLToArrayBuffer(cred.id),
+                        id: base64URLToArrayBuffer(cred.id)
                     }));
                 }
 
+                // Step 2: Get the credential assertion from the authenticator
                 const credential = await navigator.credentials.get({ publicKey: options });
+                if (!credential) throw new Error('Failed to obtain credential');
 
-                if (!credential) throw new Error('Failed to get credential');
-
+                // Prepare the credential for sending back to the server
                 const authenticationResponse = {
                     id: credential.id,
                     rawId: arrayBufferToBase64URL(credential.rawId),
@@ -62,27 +64,28 @@
                         signature: arrayBufferToBase64URL(credential.response.signature),
                         userHandle: credential.response.userHandle
                             ? arrayBufferToBase64URL(credential.response.userHandle)
-                            : null,
-                    },
+                            : null
+                    }
                 };
 
-                const loginCallbackResponse = await fetch('/login/callback', {
+                // Step 3: Send the credential to the server for verification (POST)
+                const loginCallbackResponse = await fetch('/webauthn/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, credential: authenticationResponse }),
+                    body: JSON.stringify({ username, credential: authenticationResponse })
                 });
 
                 const result = await loginCallbackResponse.json();
-                if (result.success) {
+                if (result.user) {
                     window.location.href = '/account';
                 } else {
-                    throw new Error(result.error);
+                    throw new Error(result.error || 'Authentication failed');
                 }
             } catch (error) {
                 console.error('Login Error:', error);
                 alert('Authentication failed: ' + error.message);
             } finally {
-                submitButton.disabled = false; // Re-enable the button
+                submitButton.disabled = false;
             }
         }
     </script>

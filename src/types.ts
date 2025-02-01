@@ -4,20 +4,38 @@ import type { WebAuthnCredential } from "@simplewebauthn/server";
    TYPES
 ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––– */
 export interface WebAuthnUser {
-  userID: string;
+  id?: string;
   username: string;
   passkeys: WebAuthnCredential[];
 }
 
 export interface UserStore {
+  /**
+   * Retrieves a user by their unique identifier or by username.
+   * - If `byID` is true, the lookup is done by the standardized `id`.
+   * - Otherwise, the lookup is done by username.
+   */
   get(identifier: string, byID?: boolean): Promise<WebAuthnUser | undefined>;
-  save(user: WebAuthnUser): Promise<void>;
+
+  /**
+   * Saves (or upserts) the user and returns the updated user.
+   */
+  save(user: WebAuthnUser): Promise<WebAuthnUser>;
 }
 
 export interface ChallengeStore {
-  get(userID: string): Promise<string | undefined>;
-  save(userID: string, challenge: string): Promise<void>;
-  delete(userID: string): Promise<void>;
-}
+  /**
+   * Retrieves the challenge string for a given user identifier.
+   */
+  get(userId: string): Promise<string | undefined>;
 
-export type Base64URLString = string;
+  /**
+   * Saves the challenge string for a given user identifier.
+   */
+  save(userId: string, challenge: string): Promise<void>;
+
+  /**
+   * Deletes the stored challenge for a given user identifier.
+   */
+  delete(userId: string): Promise<void>;
+}
