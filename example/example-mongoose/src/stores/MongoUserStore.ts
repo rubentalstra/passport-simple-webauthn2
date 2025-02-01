@@ -1,5 +1,5 @@
 import { User } from "../models/User";
-import type { UserStore, WebAuthnUser } from "../../../../dist/types";
+import {UserStore, WebAuthnUser} from "passport-simple-webauthn2";
 
 export class MongoUserStore implements UserStore {
     async get(identifier: string, byID = false): Promise<WebAuthnUser | undefined> {

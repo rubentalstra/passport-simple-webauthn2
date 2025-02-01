@@ -9,13 +9,6 @@ import path from "path";
 import { WebAuthnStrategy } from "passport-simple-webauthn2";
 import {InMemoryUserStore} from "./store/userStore";
 import {InMemoryChallengeStore} from "./store/challengeStore";
-import {WebAuthnUser} from "./type"; // Adjust the import path as needed
-
-// ----- In-Memory Store Implementations -----
-
-
-// ----- End of In-Memory Store Implementations -----
-
 
 // Create the Express app
 const app = express();

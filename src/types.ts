@@ -1,4 +1,4 @@
-import type { WebAuthnCredential } from "@simplewebauthn/server";
+// import type { WebAuthnCredential } from "@simplewebauthn/server";
 
 /* ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
    TYPES
@@ -6,7 +6,7 @@ import type { WebAuthnCredential } from "@simplewebauthn/server";
 export interface WebAuthnUser {
   id?: string;
   username: string;
-  passkeys: WebAuthnCredential[];
+  passkeys: any[];
 }
 
 export interface UserStore {

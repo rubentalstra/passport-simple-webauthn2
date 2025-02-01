@@ -9,7 +9,7 @@ import passport from "passport";
 import path from "path";
 import { MongoUserStore } from "./stores/MongoUserStore";
 import { MongoChallengeStore } from "./stores/MongoChallengeStore";
-import { WebAuthnStrategy } from "../../../dist";
+import { WebAuthnStrategy } from "passport-simple-webauthn2";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
