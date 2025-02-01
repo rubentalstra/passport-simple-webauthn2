@@ -1,5 +1,8 @@
 import type { WebAuthnCredential } from "@simplewebauthn/server";
 
+/* ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+   TYPES
+––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––– */
 export interface WebAuthnUser {
   userID: string;
   username: string;

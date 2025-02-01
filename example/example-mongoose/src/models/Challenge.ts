@@ -9,7 +9,7 @@ export interface IChallenge extends Document {
 const ChallengeSchema = new Schema<IChallenge>({
     userID: { type: String, required: true, unique: true },
     challenge: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now, expires: 300 }, // Auto-delete after 5 minutes
+    createdAt: { type: Date, default: Date.now, index: { expires: "5m" } },
 });
 
 export const Challenge = mongoose.model<IChallenge>("Challenge", ChallengeSchema);

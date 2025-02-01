@@ -84,7 +84,6 @@ export class WebAuthnStrategy extends PassportStrategy {
     username: string,
   ): Promise<Record<string, unknown>> {
     this.debugLog(`registerChallenge called for username: ${username}`);
-
     if (!username) throw new Error("Username required");
 
     let user = await this.getUser(username);
@@ -141,7 +140,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     req: Request,
     username: string,
     credential: RegistrationResponseJSON,
-  ): Promise<{ passkeys: WebAuthnUser["passkeys"] }> {
+  ): Promise<WebAuthnUser> {
     this.debugLog(`registerCallback called for username: ${username}`);
     const user = await this.getUser(username);
     if (!user) {
@@ -197,7 +196,13 @@ export class WebAuthnStrategy extends PassportStrategy {
         transports,
       };
 
-      return { passkeys: [...user.passkeys, newPasskey] };
+      // Update the user's passkeys and save the user
+      user.passkeys.push(newPasskey);
+      await this.userStore.save(user);
+      this.debugLog("User updated with new passkey", user);
+
+      // *** Return the user object directly ***
+      return user;
     } catch (error) {
       const errorMsg =
         error instanceof Error ? error.message : "Registration failed";
@@ -260,7 +265,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     req: Request,
     username: string,
     credential: AuthenticationResponseJSON,
-  ): Promise<{ verified: boolean; counter?: number }> {
+  ): Promise<WebAuthnUser> {
     this.debugLog(`loginCallback called for username: ${username}`);
     const user = await this.getUser(username);
     if (!user) {
@@ -327,11 +332,13 @@ export class WebAuthnStrategy extends PassportStrategy {
         throw new Error("Verification failed");
       }
 
-      // Update counter and return it instead of saving the user directly
-      return {
-        verified: true,
-        counter: verification.authenticationInfo.newCounter,
-      };
+      // Update the counter on the passkey and save the user
+      passkey.counter = verification.authenticationInfo.newCounter;
+      await this.userStore.save(user);
+      this.debugLog("User updated with new counter", user);
+
+      // *** Return the user object directly ***
+      return user;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Login failed";
       this.logger.error(`Error during login callback: ${errorMsg}`);
@@ -340,9 +347,67 @@ export class WebAuthnStrategy extends PassportStrategy {
     }
   }
 
-  authenticate(_req: Request): void {
-    throw new Error(
-      "Use registerChallenge, registerCallback, loginChallenge, or loginCallback instead.",
-    );
+  /**
+   * Fully integrated authenticate() method:
+   *
+   * Instead of relying on external options, we infer the mode (register or login)
+   * from the request path. For example, if the URL contains "register" then mode is "register",
+   * and if it contains "login" then mode is "login". You can customize this logic as needed.
+   *
+   * For GET requests, the strategy returns the generated challenge options.
+   * For POST requests, it expects the credential in req.body.credential and verifies it.
+   */
+  async authenticate(req: Request, _options?: any): Promise<void> {
+    // Infer mode based on the request path.
+    let mode: "register" | "login";
+    if (req.path.toLowerCase().includes("register")) {
+      mode = "register";
+    } else if (req.path.toLowerCase().includes("login")) {
+      mode = "login";
+    } else {
+      return this.error(
+        new Error(
+          "Could not infer mode. Please ensure the URL contains either register or login.",
+        ),
+      );
+    }
+
+    // Retrieve username from request body or query.
+    const username = req.body.username || req.query.username;
+    if (!username) {
+      return this.error(new Error("Username is required."));
+    }
+
+    try {
+      if (req.method === "GET") {
+        // Challenge phase
+        if (mode === "register") {
+          const challenge = await this.registerChallenge(req, username);
+          return this.success(challenge);
+        } else if (mode === "login") {
+          const challenge = await this.loginChallenge(req, username);
+          return this.success(challenge);
+        }
+      } else if (req.method === "POST") {
+        // Callback phase – expect credential in req.body.credential
+        const credential = req.body.credential;
+        if (!credential) {
+          return this.error(
+            new Error("Credential is required in the request body."),
+          );
+        }
+        if (mode === "register") {
+          const result = await this.registerCallback(req, username, credential);
+          return this.success(result);
+        } else if (mode === "login") {
+          const result = await this.loginCallback(req, username, credential);
+          return this.success(result);
+        }
+      } else {
+        return this.error(new Error("Unsupported HTTP method."));
+      }
+    } catch (err: any) {
+      return this.error(err);
+    }
   }
 }

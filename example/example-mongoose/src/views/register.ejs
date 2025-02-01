@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Register</title>
     <script>
+        // Utility functions for base64url conversion
         function base64URLToArrayBuffer(base64url) {
             const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
             const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -18,68 +19,68 @@
 
         async function startWebAuthnRegistration(event) {
             event.preventDefault();
-            const username = document.getElementById('username').value;
+            const username = document.getElementById('username').value.trim();
             const submitButton = document.getElementById('register-btn');
 
             if (!username) return alert('Username is required!');
-
             submitButton.disabled = true;
 
             try {
-                const challengeResponse = await fetch('/auth/register/challenge', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username }),
+                // Step 1: Request a registration challenge (GET)
+                const challengeResponse = await fetch(`/webauthn/register?username=${encodeURIComponent(username)}`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
                 });
 
                 if (!challengeResponse.ok) {
                     const error = await challengeResponse.json();
-                    throw new Error(error.error);
+                    throw new Error(error.error || 'Failed to get challenge');
                 }
 
                 const options = await challengeResponse.json();
+                console.log("Received challenge:", options.challenge);
+
+                // Convert challenge and user id from base64url to ArrayBuffer
                 options.challenge = base64URLToArrayBuffer(options.challenge);
                 options.user.id = base64URLToArrayBuffer(options.user.id);
 
+                // Convert excludeCredentials ids if present
                 if (options.excludeCredentials) {
                     options.excludeCredentials = options.excludeCredentials.map(cred => ({
                         ...cred,
-                        id: base64URLToArrayBuffer(cred.id),
+                        id: base64URLToArrayBuffer(cred.id)
                     }));
                 }
 
-                // Ensure we request a platform authenticator.
-                options.authenticatorSelection = {
-                    authenticatorAttachment: 'platform',
-                    residentKey: 'preferred',
-                    userVerification: 'preferred'
-                };
-
+                // Step 2: Create a new credential via the authenticator
                 const credential = await navigator.credentials.create({ publicKey: options });
-
                 if (!credential) throw new Error('Failed to create credential');
 
+                console.log("Credential created:", credential);
+
+                // Prepare the credential for sending to the server
                 const registrationResponse = {
                     id: credential.id,
                     rawId: arrayBufferToBase64URL(credential.rawId),
                     type: credential.type,
                     response: {
                         clientDataJSON: arrayBufferToBase64URL(credential.response.clientDataJSON),
-                        attestationObject: arrayBufferToBase64URL(credential.response.attestationObject),
-                    },
+                        attestationObject: arrayBufferToBase64URL(credential.response.attestationObject)
+                    }
                 };
 
-                const registerCallbackResponse = await fetch('/auth/register/callback', {
+                // Step 3: Send the credential to the server for verification (POST)
+                const registerCallbackResponse = await fetch('/webauthn/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, credential: registrationResponse }),
+                    body: JSON.stringify({ username, credential: registrationResponse })
                 });
 
                 const result = await registerCallbackResponse.json();
-                if (result.success) {
+                if (result.user) {
                     window.location.href = '/account';
                 } else {
-                    throw new Error(result.error);
+                    throw new Error(result.error || 'Registration failed');
                 }
             } catch (error) {
                 console.error('Registration Error:', error);

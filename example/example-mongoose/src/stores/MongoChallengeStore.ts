@@ -1,5 +1,5 @@
 import { Challenge } from "../models/Challenge";
-import type { ChallengeStore } from "../../../dist/types";
+import type { ChallengeStore } from "../../../../dist/types";
 
 export class MongoChallengeStore implements ChallengeStore {
     async get(userID: string): Promise<string | undefined> {
@@ -16,7 +16,7 @@ export class MongoChallengeStore implements ChallengeStore {
         try {
             await Challenge.findOneAndUpdate(
                 { userID },
-                { challenge },
+                { challenge, createdAt: new Date() },
                 { upsert: true, new: true, setDefaultsOnInsert: true }
             ).exec();
         } catch (error) {
