@@ -16,3 +16,5 @@ export interface ChallengeStore {
   save(userID: string, challenge: string): Promise<void>;
   delete(userID: string): Promise<void>;
 }
+
+export type Base64URLString = string;

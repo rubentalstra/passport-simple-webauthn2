@@ -1,5 +1,5 @@
 import { Challenge } from "../models/Challenge";
-import type { ChallengeStore } from "passport-simple-webauthn2";
+import { ChallengeStore } from "../../../dist/types";
 
 export class MongoChallengeStore implements ChallengeStore {
     async get(userID: string): Promise<string | undefined> {

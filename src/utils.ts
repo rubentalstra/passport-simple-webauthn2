@@ -1,7 +1,8 @@
-export type Base64URLString = string;
-
-export function bufferToBase64URL(buffer: Base64URLString): Base64URLString {
-  return Buffer.from(buffer).toString("base64url");
+export function bufferToBase64URL(
+  buffer: Buffer | ArrayBuffer | string,
+): string {
+  if (typeof buffer === "string") return buffer;
+  return Buffer.from(buffer as any).toString("base64url");
 }
 
 export const serializeAuthenticationOptions = (

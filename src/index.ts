@@ -44,7 +44,6 @@ export class WebAuthnStrategy extends PassportStrategy {
     this.challengeStore = options.challengeStore;
     this.debug = options.debug ?? false;
 
-    // Create a Winston logger instance.
     this.logger = winston.createLogger({
       level: this.debug ? "debug" : "info",
       format: winston.format.combine(
@@ -67,9 +66,6 @@ export class WebAuthnStrategy extends PassportStrategy {
     this.debugLog("Debug logging enabled");
   }
 
-  /**
-   * Logs messages if debug mode is enabled.
-   */
   private debugLog(message: string, ...optionalParams: any[]): void {
     if (this.debug) {
       this.logger.debug(message, ...optionalParams);
@@ -111,7 +107,7 @@ export class WebAuthnStrategy extends PassportStrategy {
       userName: user.username,
       attestationType: "none",
       excludeCredentials: user.passkeys.map((cred) => ({
-        id: bufferToBase64URL(cred.id),
+        id: cred.id,
         type: "public-key",
         transports: cred.transports || ["internal", "usb", "ble", "nfc"],
       })),
@@ -126,7 +122,7 @@ export class WebAuthnStrategy extends PassportStrategy {
       options,
     });
 
-    // Save the challenge (converted to a base64url string)
+    // Save the challenge (as a base64url string)
     const challengeStr = bufferToBase64URL(options.challenge);
     await this.challengeStore.save(user.userID, challengeStr);
     this.debugLog(`Challenge saved for userID ${user.userID}: ${challengeStr}`);
@@ -187,16 +183,16 @@ export class WebAuthnStrategy extends PassportStrategy {
 
       const { publicKey, id, counter, transports } =
         verification.registrationInfo.credential;
-      this.debugLog("Storing new passkey", {
-        id: bufferToBase64URL(id),
-        counter,
-        transports,
-      });
+      this.debugLog("Storing new passkey", { id, counter, transports });
 
-      // Save the public key as a Uint8Array
+      // Convert the returned publicKey into a Buffer.
+      const publicKeyBuffer = Buffer.from(
+        typeof publicKey === "object" ? Object.values(publicKey) : publicKey,
+      );
+
       user.passkeys.push({
-        id: bufferToBase64URL(id),
-        publicKey: new Uint8Array(publicKey),
+        id: id,
+        publicKey: publicKeyBuffer,
         counter,
         transports,
       });
@@ -230,6 +226,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     }
     this.debugLog(`User found with userID: ${user.userID}`);
 
+    // Filter for platform authenticators.
     const platformCredentials = user.passkeys.filter((cred) =>
       cred.transports?.includes("internal"),
     );
@@ -242,7 +239,7 @@ export class WebAuthnStrategy extends PassportStrategy {
       allowCredentials:
         platformCredentials.length > 0
           ? platformCredentials.map((cred) => ({
-              id: bufferToBase64URL(cred.id),
+              id: cred.id, // stored id is already base64url encoded
               type: "public-key",
               transports: cred.transports,
             }))
@@ -288,14 +285,10 @@ export class WebAuthnStrategy extends PassportStrategy {
       `Challenge retrieved for userID ${user.userID}: ${challenge}`,
     );
 
-    // Locate the passkey by comparing with the base64url-encoded credential id.
-    const passkey = user.passkeys.find(
-      (p) => p.id === bufferToBase64URL(credential.id),
-    );
+    // Look up the passkey by its id.
+    const passkey = user.passkeys.find((p) => p.id === credential.id);
     if (!passkey) {
-      const errMsg = `Passkey not found for credential id: ${bufferToBase64URL(
-        credential.id,
-      )}`;
+      const errMsg = `Passkey not found for credential id: ${credential.id}`;
       this.logger.error(errMsg);
       this.debugLog(errMsg);
       throw new Error("Passkey not found");
@@ -303,12 +296,11 @@ export class WebAuthnStrategy extends PassportStrategy {
     this.debugLog("Passkey found", passkey);
 
     try {
-      // Convert the stored publicKey to a Uint8Array.
-      // If it is stored as a base64 string, convert it; otherwise assume it’s already a Uint8Array.
-      const publicKeyUint8: Uint8Array =
-        typeof passkey.publicKey === "string"
-          ? new Uint8Array(Buffer.from(passkey.publicKey, "base64"))
-          : passkey.publicKey;
+      // Normalize the stored public key in case it is a BSON Binary
+      const storedPublicKey =
+        passkey.publicKey && (passkey.publicKey as any).buffer
+          ? Buffer.from((passkey.publicKey as any).buffer)
+          : Buffer.from(passkey.publicKey);
 
       this.debugLog("Verifying authentication response", credential);
       const verification = await verifyAuthenticationResponse({
@@ -321,7 +313,7 @@ export class WebAuthnStrategy extends PassportStrategy {
         expectedRPID: this.rpID,
         credential: {
           id: passkey.id,
-          publicKey: publicKeyUint8,
+          publicKey: storedPublicKey,
           counter: passkey.counter,
           transports: passkey.transports,
         },

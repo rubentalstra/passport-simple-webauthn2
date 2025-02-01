@@ -1,4 +1,3 @@
-<!-- views/login.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,7 +23,7 @@
 
             if (!username) return alert('Username is required!');
 
-            submitButton.disabled = true; // Prevent duplicate requests
+            submitButton.disabled = true;
 
             try {
                 const challengeResponse = await fetch('/auth/login/challenge', {
@@ -82,7 +81,7 @@
                 console.error('Login Error:', error);
                 alert('Authentication failed: ' + error.message);
             } finally {
-                submitButton.disabled = false; // Re-enable the button
+                submitButton.disabled = false;
             }
         }
     </script>

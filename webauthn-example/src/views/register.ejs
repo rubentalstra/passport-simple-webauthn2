@@ -1,4 +1,3 @@
-<!-- views/register.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,7 +23,7 @@
 
             if (!username) return alert('Username is required!');
 
-            submitButton.disabled = true; // Prevent duplicate requests
+            submitButton.disabled = true;
 
             try {
                 const challengeResponse = await fetch('/auth/register/challenge', {
@@ -49,7 +48,7 @@
                     }));
                 }
 
-                // Ensure we request a platform authenticator (Touch ID)
+                // Ensure we request a platform authenticator.
                 options.authenticatorSelection = {
                     authenticatorAttachment: 'platform',
                     residentKey: 'preferred',
@@ -86,7 +85,7 @@
                 console.error('Registration Error:', error);
                 alert('Registration failed: ' + error.message);
             } finally {
-                submitButton.disabled = false; // Re-enable the button
+                submitButton.disabled = false;
             }
         }
     </script>

@@ -2,7 +2,8 @@ import express, { NextFunction, Request, Response } from "express";
 import passport from "passport";
 import { MongoUserStore } from "../stores/MongoUserStore";
 import { MongoChallengeStore } from "../stores/MongoChallengeStore";
-import {WebAuthnStrategy} from "passport-simple-webauthn2";
+// @ts-ignore
+import {WebAuthnStrategy} from "../../../dist/index";
 
 const router = express.Router();
 const userStore = new MongoUserStore();
