@@ -98,7 +98,7 @@ export class WebAuthnStrategy extends PassportStrategy {
       user = await this.userStore.save(user);
       // Ensure that an id was generated.
       if (!user.id) {
-        throw new Error("User creation failed: no id returned from the store");
+        throw new Error("User creation failed: no id returned from the stores");
       }
       this.debugLog(`New user created with id: ${user.id}`);
     } else {
