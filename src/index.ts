@@ -1,3 +1,8 @@
+/**
+ * Passport Strategy that implements "Web Authn (PassKeys)"
+ * @author: Ruben Talstra <>
+ */
+
 import { Strategy as PassportStrategy } from "passport-strategy";
 import {
   generateRegistrationOptions,
