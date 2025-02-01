@@ -1,14 +1,13 @@
 import { Challenge } from "../models/Challenge";
-import { ChallengeStore } from "../../../dist/types";
+import type { ChallengeStore } from "../../../dist/types";
 
 export class MongoChallengeStore implements ChallengeStore {
     async get(userID: string): Promise<string | undefined> {
         try {
             const challenge = await Challenge.findOne({ userID }).lean().exec();
-            console.log("🔹 Fetched Challenge for", userID, ":", challenge);
             return challenge?.challenge;
         } catch (error) {
-            console.error(`Error fetching challenge for userID ${userID}:`, error);
+            console.error(`❌ Error fetching challenge for userID ${userID}:`, error);
             return undefined;
         }
     }
@@ -21,7 +20,7 @@ export class MongoChallengeStore implements ChallengeStore {
                 { upsert: true, new: true, setDefaultsOnInsert: true }
             ).exec();
         } catch (error) {
-            console.error(`Error saving challenge for userID ${userID}:`, error);
+            console.error(`❌ Error saving challenge for userID ${userID}:`, error);
         }
     }
 
@@ -29,7 +28,7 @@ export class MongoChallengeStore implements ChallengeStore {
         try {
             await Challenge.deleteOne({ userID }).exec();
         } catch (error) {
-            console.error(`Error deleting challenge for userID ${userID}:`, error);
+            console.error(`❌ Error deleting challenge for userID ${userID}:`, error);
         }
     }
 }

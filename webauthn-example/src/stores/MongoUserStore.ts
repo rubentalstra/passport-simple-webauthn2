@@ -4,13 +4,11 @@ import type { UserStore, WebAuthnUser } from "../../../dist/types";
 export class MongoUserStore implements UserStore {
     async get(identifier: string, byID = false): Promise<WebAuthnUser | undefined> {
         try {
-            const query = byID ? { userID: identifier } : { username: identifier };
-            const user = await User.findOne(query).lean().exec();
-
-            // console.log("🔹 Fetched User Data:", user);
-            return user as WebAuthnUser | undefined;
+            return await User.findOne(byID ? { userID: identifier } : { username: identifier })
+                .lean()
+                .exec() as WebAuthnUser | undefined;
         } catch (error) {
-            // console.error(`❌ Error fetching user (${byID ? "userID" : "username"}: ${identifier}):`, error);
+            console.error(`❌ Error fetching user (${byID ? "userID" : "username"}: ${identifier}):`, error);
             return undefined;
         }
     }
@@ -22,25 +20,46 @@ export class MongoUserStore implements UserStore {
             if (existingUser) {
                 user.passkeys = user.passkeys.map((passkey) => {
                     const existingPasskey = existingUser.passkeys.find((p) => p.id === passkey.id);
-                    if (existingPasskey) {
-                        return { ...passkey, publicKey: existingPasskey.publicKey };
-                    }
-                    if (!passkey.publicKey || (Buffer.isBuffer(passkey.publicKey) && passkey.publicKey.length === 0)) {
-                        return passkey;
-                    }
-                    return passkey;
+                    return existingPasskey ? { ...passkey, publicKey: existingPasskey.publicKey } : passkey;
                 });
             }
 
             await User.findOneAndUpdate(
                 { userID: user.userID },
-                { $set: { username: user.username, passkeys: user.passkeys } },
+                { username: user.username, passkeys: user.passkeys },
                 { upsert: true, new: true, setDefaultsOnInsert: true }
             ).exec();
-
-            // console.log(`✅ Successfully saved user: ${user.userID}`);
         } catch (error) {
             console.error(`❌ Error saving user (${user.userID}):`, error);
+        }
+    }
+
+    /**
+     * Updates the passkeys for a user.
+     */
+    async updatePasskeys(username: string, passkeys: WebAuthnUser["passkeys"]): Promise<void> {
+        try {
+            await User.findOneAndUpdate(
+                { username },
+                { $set: { passkeys } },
+                { new: true }
+            ).exec();
+        } catch (error) {
+            console.error(`❌ Error updating passkeys for username: ${username}`, error);
+        }
+    }
+
+    /**
+     * Updates the counter for a specific passkey.
+     */
+    async updatePasskeyCounter(username: string, credentialID: string, counter?: number): Promise<void> {
+        try {
+            await User.findOneAndUpdate(
+                { username, "passkeys.id": credentialID },
+                { $set: { "passkeys.$.counter": counter } }
+            ).exec();
+        } catch (error) {
+            console.error(`❌ Error updating passkey counter for username: ${username}, credentialID: ${credentialID}`, error);
         }
     }
 }

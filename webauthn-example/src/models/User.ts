@@ -5,7 +5,7 @@ export interface IUser extends Document {
     username: string;
     passkeys: {
         id: string;
-        publicKey: Buffer; // stored as a Buffer in MongoDB
+        publicKey: Buffer; // Stored as a Buffer in MongoDB
         counter: number;
         transports: string[];
     }[];
@@ -17,10 +17,7 @@ const UserSchema = new Schema<IUser>({
     passkeys: [
         {
             id: { type: String, required: true },
-            publicKey: {
-                type: Buffer,
-                required: true,
-            },
+            publicKey: { type: Buffer, required: true },
             counter: { type: Number, required: true },
             transports: { type: [String], required: true },
         },

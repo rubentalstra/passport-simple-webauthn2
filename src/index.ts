@@ -141,7 +141,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     req: Request,
     username: string,
     credential: RegistrationResponseJSON,
-  ): Promise<WebAuthnUser> {
+  ): Promise<{ passkeys: WebAuthnUser["passkeys"] }> {
     this.debugLog(`registerCallback called for username: ${username}`);
     const user = await this.getUser(username);
     if (!user) {
@@ -185,26 +185,19 @@ export class WebAuthnStrategy extends PassportStrategy {
         verification.registrationInfo.credential;
       this.debugLog("Storing new passkey", { id, counter, transports });
 
-      // Convert the returned publicKey into a Buffer.
+      // Convert publicKey to Buffer
       const publicKeyBuffer = Buffer.from(
         typeof publicKey === "object" ? Object.values(publicKey) : publicKey,
       );
 
-      user.passkeys.push({
-        id: id,
+      const newPasskey = {
+        id,
         publicKey: publicKeyBuffer,
         counter,
         transports,
-      });
+      };
 
-      await this.userStore.save(user);
-      this.debugLog(
-        `User updated and saved with new passkey, userID: ${user.userID}`,
-      );
-      this.logger.info(
-        `User ${user.username} (ID: ${user.userID}) successfully registered.`,
-      );
-      return user;
+      return { passkeys: [...user.passkeys, newPasskey] };
     } catch (error) {
       const errorMsg =
         error instanceof Error ? error.message : "Registration failed";
@@ -267,7 +260,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     req: Request,
     username: string,
     credential: AuthenticationResponseJSON,
-  ): Promise<WebAuthnUser> {
+  ): Promise<{ verified: boolean; counter?: number }> {
     this.debugLog(`loginCallback called for username: ${username}`);
     const user = await this.getUser(username);
     if (!user) {
@@ -285,18 +278,19 @@ export class WebAuthnStrategy extends PassportStrategy {
       `Challenge retrieved for userID ${user.userID}: ${challenge}`,
     );
 
-    // Look up the passkey by its id.
+    // Find the passkey by its id
     const passkey = user.passkeys.find((p) => p.id === credential.id);
     if (!passkey) {
-      const errMsg = `Passkey not found for credential id: ${credential.id}`;
-      this.logger.error(errMsg);
-      this.debugLog(errMsg);
+      this.logger.error(
+        `Passkey not found for credential id: ${credential.id}`,
+      );
+      this.debugLog(`Passkey not found for credential id: ${credential.id}`);
       throw new Error("Passkey not found");
     }
     this.debugLog("Passkey found", passkey);
 
     try {
-      // Normalize the stored public key in case it is a BSON Binary
+      // Normalize the stored public key
       const storedPublicKey =
         passkey.publicKey && (passkey.publicKey as any).buffer
           ? Buffer.from((passkey.publicKey as any).buffer)
@@ -333,16 +327,11 @@ export class WebAuthnStrategy extends PassportStrategy {
         throw new Error("Verification failed");
       }
 
-      // Update the passkey counter.
-      passkey.counter = verification.authenticationInfo.newCounter;
-      await this.userStore.save(user);
-      this.debugLog(
-        `User updated and saved with updated passkey counter, userID: ${user.userID}`,
-      );
-      this.logger.info(
-        `User ${user.username} (ID: ${user.userID}) successfully logged in.`,
-      );
-      return user;
+      // Update counter and return it instead of saving the user directly
+      return {
+        verified: true,
+        counter: verification.authenticationInfo.newCounter,
+      };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Login failed";
       this.logger.error(`Error during login callback: ${errorMsg}`);
