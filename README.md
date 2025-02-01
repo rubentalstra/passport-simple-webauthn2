@@ -7,6 +7,8 @@
 
 **Passport strategy for authenticating with Web Authentication (WebAuthn) using FIDO2 Passkeys.**
 
+> **Note:** This version returns and stores the full user object (instead of only an identifier) in the session. See the [Usage](#usage) section for instructions on how to configure Passport accordingly.
+
 ## Table of Contents
 
 - [Features](#features)
@@ -18,27 +20,31 @@
     - [3. Registration Routes](#3-registration-routes)
     - [4. Authentication Routes](#4-authentication-routes)
 - [API Reference](#api-reference)
-    - [Strategy](#simplewebauthnstrategy)
+    - [Strategy](#strategy)
     - [Utility Functions](#utility-functions)
 - [Type Definitions](#type-definitions)
 - [Contributing](#contributing)
 - [License](#license)
+- [Additional Information](#additional-information)
 
 ## Features
 
-- **WebAuthn Integration:** Leverages the power of [@simplewebauthn/server](https://github.com/MasterKale/SimpleWebAuthn) for robust Web Authentication.
-- **Passport.js Compatibility:** Seamlessly integrates with Passport.js, enabling easy use within existing authentication workflows.
-- **TypeScript Support:** Fully typed with TypeScript, ensuring type safety and better developer experience.
-- **Challenge Management:** Handles generation, storage, and verification of WebAuthn challenges.
-- **Customizable User Retrieval:** Allows developers to define custom logic for retrieving users based on WebAuthn credentials.
+- **WebAuthn Integration:** Leverages [@simplewebauthn/server](https://github.com/MasterKale/SimpleWebAuthn) for robust Web Authentication.
+- **Passport.js Compatibility:** Seamlessly integrates with Passport.js for use in existing authentication workflows.
+- **Full User Object in Session:** The strategy now returns the complete user object, and the recommended Passport configuration stores the entire user in the session.
+- **TypeScript Support:** Fully typed with TypeScript for enhanced type safety and developer experience.
+- **Challenge Management:** Automatically generates, stores, and verifies WebAuthn challenges.
+- **Customizable User Retrieval:** Define your own logic to retrieve users based on WebAuthn credentials.
 
 ## Installation
+
+Install via npm:
 
 ```bash
 npm install passport-simple-webauthn2
 ```
 
-or with Yarn:
+Or with Yarn:
 
 ```bash
 yarn add passport-simple-webauthn2
@@ -46,18 +52,18 @@ yarn add passport-simple-webauthn2
 
 ## Prerequisites
 
-- **Node.js**: Ensure you have Node.js installed (version 14 or higher recommended).
-- **Express.js**: This strategy is designed to work with Express.js applications.
-- **Passport.js**: Familiarity with Passport.js is beneficial.
-- **Session Management**: Configure session management using `express-session` or similar middleware.
+- **Node.js:** Version 14 or higher is recommended.
+- **Express.js:** This strategy is designed for Express.js applications.
+- **Passport.js:** Familiarity with Passport.js is helpful.
+- **Session Management:** Configure sessions using `express-session` (or similar) as shown below.
 
 ## Usage
 
-Integrate `passport-simple-webauthn2` into your Node.js Express application by following these steps:
+Integrate **passport-simple-webauthn2** into your Express application. The example below demonstrates the complete setup, including updated Passport configuration to store the full user object.
 
 ### 1. Setting Up Your Express Application
 
-First, set up a basic Express application with Passport.js and session management.
+Create your Express application (e.g., in `src/app.ts`). Note how Passport is configured to serialize and deserialize the full user object:
 
 ```typescript
 // src/app.ts
@@ -65,192 +71,17 @@ import express from "express";
 import session from "express-session";
 import passport from "passport";
 import bodyParser from "body-parser";
-import { Strategy } from "passport-simple-webauthn2";
-
-// Initialize Express app
-const app = express();
-
-// Middleware setup
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// Session configuration
-app.use(
-  session({
-    secret: "your-secret-key",
-    resave: false,
-    saveUninitialized: false,
-  })
-);
-
-// Initialize Passport.js
-app.use(passport.initialize());
-app.use(passport.session());
-
-// User serialization
-passport.serializeUser((user, done) => {
-  done(null, (user as any).id); // Adjust based on your user object structure
-});
-
-passport.deserializeUser(async (id, done) => {
-  // Implement user retrieval based on ID
-  const user = await getUserById(id); // Replace with your user retrieval logic
-  done(null, user);
-});
-
-// Define your routes here...
-
-export default app;
-```
-
-### 2. Configuring the Strategy
-
-Set up the `Strategy` with your user retrieval logic.
-
-```typescript
-// src/auth/passport.ts
-import passport from "passport";
-import { Strategy, SimpleWebAuthnStrategyOptions } from "passport-simple-webauthn2";
-import type { Request } from "express";
-
-// Example User Model
-interface User {
-  id: Uint8Array;
-  username: string;
-  credentials: WebAuthnCredential[];
-}
-
-// Mock user retrieval function
-const getUser: SimpleWebAuthnStrategyOptions["getUser"] = async (req: Request, id: Uint8Array) => {
-  // Replace this with your actual user retrieval logic (e.g., database query)
-  const user = await findUserById(id); // Implement this function
-  return user;
-};
-
-// Initialize the strategy
-const strategyOptions: SimpleWebAuthnStrategyOptions = {
-  getUser,
-};
-
-const webAuthnStrategy = new Strategy(strategyOptions);
-
-// Use the strategy with Passport
-passport.use(webAuthnStrategy);
-
-export default passport;
-```
-
-### 3. Registration Routes
-
-Implement routes to handle user registration (i.e., registering new WebAuthn credentials).
-
-```typescript
-// src/routes/register.ts
-import express, { Request, Response } from "express";
-import { generateRegistration, registration } from "passport-simple-webauthn2";
-import type { RegistrationUser } from "passport-simple-webauthn2";
-
-const router = express.Router();
-
-// Route to initiate registration
-router.post("/register/options", async (req: Request, res: Response) => {
-  const { username, displayName } = req.body;
-
-  // Create a new user or retrieve existing user
-  const user: RegistrationUser = {
-    id: generateUserId(), // Implement this function to generate a unique Uint8Array ID
-    name: username,
-    displayName: displayName,
-    credentials: [], // Initially, no credentials
-  };
-
-  // Generate registration options
-  const options = await generateRegistration(req, user);
-
-  // Optionally, save the user to your database here
-
-  res.json(options);
-});
-
-// Route to handle registration response
-router.post("/register/response", async (req: Request, res: Response) => {
-  const { userId, response } = req.body;
-
-  // Retrieve user from your database
-  const user = await getUserById(Buffer.from(userId, "base64url")); // Implement this function
-
-  if (!user) {
-    return res.status(404).json({ error: "User not found" });
-  }
-
-  try {
-    const verification = await registration(req, user, response);
-
-    if (verification.verified) {
-      // Save the credential to your database
-      user.credentials.push(verification.registrationInfo!);
-      await saveUser(user); // Implement this function
-      res.json({ success: true });
-    } else {
-      res.status(400).json({ error: "Verification failed" });
-    }
-  } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
-  }
-});
-
-export default router;
-```
-
-### 4. Authentication Routes
-
-Implement routes to handle user authentication (i.e., logging in with WebAuthn credentials).
-
-```typescript
-// src/routes/authenticate.ts
-import express, { Request, Response } from "express";
-import passport from "passport";
-import { generateAuthentication, verifyAuthentication } from "passport-simple-webauthn2";
-import type { AuthUser } from "passport-simple-webauthn2";
-
-const router = express.Router();
-
-// Route to initiate authentication
-router.post("/authenticate/options", async (req: Request, res: Response) => {
-  try {
-    const options = await generateAuthentication(req);
-    res.json(options);
-  } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
-  }
-});
-
-// Route to handle authentication response
-router.post("/authenticate/response", passport.authenticate("simple-webauthn"), (req: Request, res: Response) => {
-  // Successful authentication
-  res.json({ success: true });
-});
-
-export default router;
-```
-
-### 5. Integrating Routes into Your Application
-
-Finally, integrate the registration and authentication routes into your Express application.
-
-```typescript
-// src/app.ts
-import express from "express";
-import session from "express-session";
-import passport from "passport";
-import bodyParser from "body-parser";
-import passportSetup from "./auth/passport";
+import path from "path";
 import registerRoutes from "./routes/register";
 import authenticateRoutes from "./routes/authenticate";
 
 // Initialize Express app
 const app = express();
 
+// Set view engine (optional, for rendering EJS pages)
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
+
 // Middleware setup
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -261,6 +92,8 @@ app.use(
     secret: "your-secret-key",
     resave: false,
     saveUninitialized: false,
+    // In production, set secure cookies and proper options
+    cookie: { secure: false, httpOnly: true, maxAge: 24 * 60 * 60 * 1000 },
   })
 );
 
@@ -268,19 +101,13 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// User serialization
+// Passport Serialization: Store the full user object in the session
 passport.serializeUser((user, done) => {
-  done(null, (user as any).id); // Adjust based on your user object structure
-});
-
-passport.deserializeUser(async (id, done) => {
-  // Implement user retrieval based on ID
-  const user = await getUserById(id); // Replace with your user retrieval logic
   done(null, user);
 });
-
-// Use Passport strategy
-passportSetup;
+passport.deserializeUser((user, done) => {
+  done(null, user);
+});
 
 // Use registration and authentication routes
 app.use("/auth", registerRoutes);
@@ -288,81 +115,202 @@ app.use("/auth", authenticateRoutes);
 
 // Start the server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+export default app;
+```
+
+### 2. Configuring the Strategy
+
+Set up the **passport-simple-webauthn2** strategy with your own user retrieval and challenge storage logic. For example:
+
+```typescript
+// src/auth/passport.ts
+import passport from "passport";
+import { Strategy, SimpleWebAuthnStrategyOptions } from "passport-simple-webauthn2";
+import type { Request } from "express";
+import { MongoUserStore } from "../stores/MongoUserStore";
+import { MongoChallengeStore } from "../stores/MongoChallengeStore";
+
+// Initialize your stores
+const userStore = new MongoUserStore();
+const challengeStore = new MongoChallengeStore();
+
+// Configure the strategy options
+const strategyOptions: SimpleWebAuthnStrategyOptions = {
+  rpID: process.env.RP_ID || "localhost",       // e.g., your domain
+  rpName: process.env.RP_NAME || "Your App",
+  userStore,
+  challengeStore,
+  debug: true,  // Enable debug logging if needed
+};
+
+// Create an instance of the strategy
+const webAuthnStrategy = new Strategy(strategyOptions);
+
+// Use the strategy with Passport
+passport.use("webauthn", webAuthnStrategy);
+
+export default passport;
+```
+
+### 3. Registration Routes
+
+Implement routes to register a new WebAuthn credential. The strategy automatically returns the full user object upon successful registration. For example:
+
+```typescript
+// src/routes/register.ts
+import express, { Request, Response } from "express";
+import passport from "passport";
+
+const router = express.Router();
+
+// Initiate registration challenge (GET request)
+router.get("/register", passport.authenticate("webauthn", { session: false }), (req: Request, res: Response) => {
+  // Returns registration options (challenge)
+  res.json(req.user);
 });
+
+// Registration callback (POST request)
+router.post("/register", passport.authenticate("webauthn", { session: false }), (req: Request, res: Response) => {
+  // On success, req.user contains the updated user object with the new passkey
+  res.json({ user: req.user });
+});
+
+export default router;
+```
+
+### 4. Authentication Routes
+
+Implement routes to authenticate using an existing WebAuthn credential. Again, on success, the strategy returns the full user object.
+
+```typescript
+// src/routes/authenticate.ts
+import express, { Request, Response } from "express";
+import passport from "passport";
+
+const router = express.Router();
+
+// Initiate authentication challenge (GET request)
+router.get("/login", passport.authenticate("webauthn", { session: false }), (req: Request, res: Response) => {
+  res.json(req.user);
+});
+
+// Authentication callback (POST request)
+router.post("/login", passport.authenticate("webauthn"), (req: Request, res: Response) => {
+  // Successful authentication returns the full user object in req.user
+  res.json({ user: req.user });
+});
+
+export default router;
+```
+
+### Bonus: Account Page with EJS
+
+An example EJS template (`views/account.ejs`) to display user passkeys in a nicely formatted table:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your Account</title>
+  <!-- Bootstrap CSS for styling -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    body { margin-top: 30px; }
+    .container { max-width: 800px; }
+    .passkey-table { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Your Account</h1>
+    <h2>Registered Passkeys</h2>
+    <% if (passkeys && passkeys.length > 0) { %>
+      <table class="table table-striped passkey-table">
+        <thead class="thead-dark">
+          <tr>
+            <th>ID</th>
+            <th>Counter</th>
+            <th>Transports</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% passkeys.forEach(passkey => { %>
+            <tr>
+              <td><%= passkey.id %></td>
+              <td><%= passkey.counter %></td>
+              <td>
+                <% if (passkey.transports && passkey.transports.length > 0) { %>
+                  <%= passkey.transports.join(', ') %>
+                <% } else { %>
+                  N/A
+                <% } %>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <div class="alert alert-info" role="alert">No passkeys found.</div>
+    <% } %>
+    <form action="/logout" method="POST" class="mt-4">
+      <button type="submit" class="btn btn-danger">Logout</button>
+    </form>
+  </div>
+  <!-- Bootstrap JS (optional) -->
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
 ```
 
 ## API Reference
 
 ### Strategy
 
-#### `Strategy(options: SimpleWebAuthnStrategyOptions)`
+#### `new Strategy(options: SimpleWebAuthnStrategyOptions)`
 
 Creates an instance of the WebAuthn Passport strategy.
 
 - **Parameters:**
-    - `options`: Configuration options for the strategy.
-    - `getUser`: Function to retrieve a user based on the provided ID.
+    - `options`: An object containing configuration options:
+        - `rpID`: Your Relying Party ID (domain).
+        - `rpName`: Your Relying Party name.
+        - `userStore`: An object implementing the `UserStore` interface.
+        - `challengeStore`: An object implementing the `ChallengeStore` interface.
+        - `debug` (optional): Enable debug logging if needed.
 
 #### Methods
 
 ##### `authenticate(req: Request, _options?: any): void`
 
-Overrides Passport's `authenticate` method to handle WebAuthn authentication.
-
-- **Parameters:**
-    - `req`: Express request object.
-    - `_options`: Optional authentication options (unused).
+Overrides Passport's default method to:
+- Infer the mode (registration or login) based on the request path.
+- Generate and send a challenge for GET requests.
+- Verify credentials for POST requests.
+- Returns the full user object on success.
 
 ### Utility Functions
 
-The package exports several utility functions for handling registration and authentication processes.
+The package provides several utility functions to handle registration and authentication flows:
 
-#### `generateRegistration(req: Request, user: RegistrationUser): Promise<RegistrationOptions>`
+- **`generateRegistration(req: Request, user: RegistrationUser): Promise<RegistrationOptions>`**  
+  Generates registration options for a new WebAuthn credential.
 
-Generates registration options for a new WebAuthn credential.
+- **`registration(req: Request, user: RegistrationUser, response: RegistrationResponseJSON): Promise<VerifiedRegistrationResponse>`**  
+  Verifies the registration response from the client.
 
-- **Parameters:**
-    - `req`: Express request object.
-    - `user`: The user registering a new credential.
+- **`generateAuthentication(req: Request): Promise<AuthenticationOptions>`**  
+  Generates authentication options for existing credentials.
 
-- **Returns:** Registration options compatible with WebAuthn clients.
-
-#### `registration(req: Request, user: RegistrationUser, response: RegistrationResponseJSON): Promise<VerifiedRegistrationResponse>`
-
-Verifies the registration response from the client.
-
-- **Parameters:**
-    - `req`: Express request object.
-    - `user`: The user registering a new credential.
-    - `response`: The registration response JSON from the client.
-
-- **Returns:** Verification result indicating success or failure.
-
-#### `generateAuthentication(req: Request): Promise<AuthenticationOptions>`
-
-Generates authentication options for an existing WebAuthn credential.
-
-- **Parameters:**
-    - `req`: Express request object.
-
-- **Returns:** Authentication options compatible with WebAuthn clients.
-
-#### `verifyAuthentication(req: Request, user: AuthUser, response: AuthenticationResponseJSON): Promise<VerifiedAuthenticationResponse>`
-
-Verifies the authentication response from the client.
-
-- **Parameters:**
-    - `req`: Express request object.
-    - `user`: The user attempting to authenticate.
-    - `response`: The authentication response JSON from the client.
-
-- **Returns:** Verification result indicating success or failure.
+- **`verifyAuthentication(req: Request, user: AuthUser, response: AuthenticationResponseJSON): Promise<VerifiedAuthenticationResponse>`**  
+  Verifies the authentication response from the client.
 
 #### Challenge Store Functions
 
-Functions to manage challenges during the authentication process.
+Functions to manage challenges during authentication:
 
 - `saveChallenge(req: Request, userId: string, challenge: string): Promise<void>`
 - `getChallenge(req: Request, userId: string): Promise<string | null>`
@@ -370,33 +318,29 @@ Functions to manage challenges during the authentication process.
 
 ## Type Definitions
 
-The package provides comprehensive TypeScript type definitions to ensure type safety and enhance developer experience.
+### User Model
 
-### `UserModel`
-
-Represents a user in the application.
+Represents a user in your application.
 
 ```typescript
 export type UserModel = {
   id: any;
   username: string;
+  passkeys: Passkey[];
 };
 ```
 
-### `Passkey`
+### Passkey
 
-Represents a WebAuthn passkey associated with a user.
+Represents a WebAuthn passkey.
 
 ```typescript
 export type Passkey = {
   id: Base64URLString;
   publicKey: Uint8Array;
-  user: UserModel;
-  webauthnUserID: Base64URLString;
   counter: number;
-  deviceType: CredentialDeviceType;
-  backedUp: boolean;
-  transports?: AuthenticatorTransportFuture[];
+  transports?: string[];
+  // Additional metadata as needed...
 };
 ```
 
@@ -404,48 +348,30 @@ export type Passkey = {
 
 Contributions are welcome! Please follow these steps:
 
-1. **Fork the Repository:** Click the "Fork" button at the top-right corner of the repository page.
-
+1. **Fork the Repository**
 2. **Clone Your Fork:**
-
    ```bash
    git clone https://github.com/your-username/passport-simple-webauthn2.git
    cd passport-simple-webauthn2
    ```
-
 3. **Install Dependencies:**
-
    ```bash
    npm install
    ```
-
 4. **Create a Feature Branch:**
-
    ```bash
    git checkout -b feature/YourFeatureName
    ```
-
-5. **Make Your Changes:** Implement your feature or bug fix.
-
-6. **Run Tests:** Ensure all tests pass.
-
+5. **Make Your Changes & Run Tests:**
    ```bash
    npm test
    ```
-
-7. **Commit Your Changes:**
-
+6. **Commit & Push Your Changes:**
    ```bash
    git commit -m "Add Your Feature Description"
-   ```
-
-8. **Push to Your Fork:**
-
-   ```bash
    git push origin feature/YourFeatureName
    ```
-
-9. **Create a Pull Request:** Navigate to the original repository and create a pull request from your fork.
+7. **Create a Pull Request**
 
 ## License
 
@@ -457,43 +383,38 @@ This project is licensed under the [MIT License](LICENSE).
 
 ### Environment Variables
 
-Ensure you have the following environment variables set in your application for proper configuration:
-
-- `RP_NAME`: Relying Party name (e.g., your application's name).
-- `RP_ID`: Relying Party ID (e.g., your domain, e.g., `example.com`).
+Configure your environment with variables such as:
+- `RP_ID`: Relying Party ID (domain).
+- `RP_NAME`: Relying Party name.
 
 ### Security Considerations
 
-- **HTTPS:** WebAuthn requires a secure context. Ensure your application is served over HTTPS in production environments.
-- **Session Security:** Configure session management with secure settings (e.g., `secure`, `httpOnly` cookies) to prevent session hijacking.
-- **Challenge Storage:** The current implementation uses an in-memory store for challenges. For scalability and persistence, consider integrating a distributed store like Redis.
+- **HTTPS:** Ensure your application uses HTTPS in production.
+- **Session Security:** Configure secure session cookies and proper options.
+- **Challenge Storage:** While the default challenge store works for many cases, consider using a distributed store (e.g., Redis) in scalable environments.
 
 ### Testing
 
-The package includes comprehensive tests to ensure reliability. To run the tests:
+Run the tests with:
 
 ```bash
 npm test
 ```
 
-Ensure all tests pass before deploying or contributing to the project.
-
 ### Documentation
 
-Detailed documentation is generated using [TypeDoc](https://typedoc.org/). To generate documentation:
+Generate documentation with [TypeDoc](https://typedoc.org/):
 
 ```bash
 npm run docs
 ```
 
-The generated documentation will be available in the `docs` directory.
+The generated docs are available in the `docs` folder.
+
+### Example Projects
+
+For a complete example of an Express integration, see the [example project](https://github.com/rubentalstra/passport-simple-webauthn2/tree/main/example).
 
 ---
 
-## Example Project
-
-For a complete example of how to integrate `passport-simple-webauthn2` into a Node.js Express application, refer to the [example project](https://github.com/rubentalstra/passport-simple-webauthn2-example).
-
----
-
-Feel free to open issues or submit pull requests for any features or bugs you encounter. Happy authenticating!
+Happy authenticating!

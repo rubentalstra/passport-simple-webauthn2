@@ -8,9 +8,8 @@ import session from "express-session";
 import passport from "passport";
 import path from "path";
 import { MongoUserStore } from "./stores/MongoUserStore";
-import {MongoChallengeStore} from "./stores/MongoChallengeStore";
+import { MongoChallengeStore } from "./stores/MongoChallengeStore";
 import { WebAuthnStrategy } from "../../../dist";
-import {User} from "./models/User";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -45,20 +44,13 @@ app.use(passport.session());
 const userStore = new MongoUserStore();
 const challengeStore = new MongoChallengeStore();
 
-// Serialize and deserialize users properly
-// Assuming your userStore has a method to retrieve a user by ID.
+// Instead of storing only a userID, we now store the entire user object.
 passport.serializeUser((user: any, done) => {
-    done(null, user.userID);
+    done(null, user);
 });
 
-passport.deserializeUser(async (id: string, done) => {
-    try {
-        // Retrieve the user from your userStore by the userID.
-        const user = await userStore.get(id, true); // `true` indicates search by userID
-        done(null, user);
-    } catch (err) {
-        done(err);
-    }
+passport.deserializeUser((user: any, done) => {
+    done(null, user);
 });
 
 // Initialize and use the WebAuthn strategy
@@ -72,10 +64,9 @@ passport.use(
     })
 );
 
-
 // Routes
 
-// Homepage and other views
+// Homepage and view pages
 app.get("/", (req: Request, res: Response) => {
     res.render("index");
 });
@@ -93,41 +84,40 @@ app.get(
     "/webauthn/register",
     passport.authenticate("webauthn", { session: false }),
     (req, res) => {
-        // Return challenge options without storing them in session
-        res.json(req.user);
+        res.json(req.user); // Returns challenge options
     }
 );
 
 // Registration Callback Endpoint (POST)
-app.post("/webauthn/register", passport.authenticate("webauthn", { session: false }),
+app.post(
+    "/webauthn/register",
+    passport.authenticate("webauthn", { session: false }),
     (req, res) => {
-    // On success, req.user will contain the updated user (with the new passkey).
-    res.json({ user: req.user });
-});
+        // On success, req.user contains the updated user (with new passkey)
+        res.json({ user: req.user });
+    }
+);
 
 // Login Challenge Endpoint (GET)
 app.get(
     "/webauthn/login",
     passport.authenticate("webauthn", { session: false }),
     (req, res) => {
-        // Return challenge options without storing them in session
-        res.json(req.user);
+        res.json(req.user); // Returns challenge options
     }
 );
 
 // Login Callback Endpoint (POST)
-app.post("/webauthn/login", passport.authenticate("webauthn"),
-    (req, res) => {
-    // On success, req.user will be the authenticated user.
+app.post("/webauthn/login", passport.authenticate("webauthn"), (req, res) => {
+    // On success, req.user is the authenticated user.
     res.json({ user: req.user });
 });
 
-// Updated /account route: use req.user instead of req.session.userID
-app.get("/account", async (req: Request, res: Response) => {
+// Account Route: Uses the user from req.user
+app.get("/account", (req: Request, res: Response) => {
     if (!req.isAuthenticated() || !req.user) {
         return res.redirect("/login");
     }
-
     try {
         res.render("account", { passkeys: (req.user as any).passkeys });
     } catch (error) {
@@ -136,18 +126,13 @@ app.get("/account", async (req: Request, res: Response) => {
     }
 });
 
-app.get("/account/passkeys", async (req: Request, res: Response) => {
-    if (!req.session.userID) {
+// Account Passkeys Route: Now uses req.user
+app.get("/account/passkeys", (req: Request, res: Response) => {
+    if (!req.isAuthenticated() || !req.user) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-
     try {
-        const user = await User.findOne({ userID: req.session.userID }).lean();
-        if (!user) {
-            return res.status(404).json({ error: "User not found" });
-        }
-
-        res.json({ passkeys: user.passkeys });
+        res.json({ passkeys: (req.user as any).passkeys });
     } catch (err) {
         console.error("Error fetching passkeys:", err);
         res.status(500).json({ error: "Internal Server Error" });
@@ -164,7 +149,7 @@ app.post("/logout", (req, res, next) => {
     });
 });
 
-// MongoDB Connection (Only for user data, not sessions)
+// MongoDB Connection (for user data, not sessions)
 mongoose
     .connect(process.env.MONGO_URI || "mongodb://localhost:27017/webauthnDB")
     .then(() => console.log("MongoDB connected"))
