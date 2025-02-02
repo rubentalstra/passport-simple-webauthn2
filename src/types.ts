@@ -5,7 +5,7 @@
 ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––– */
 export interface WebAuthnUser {
   id?: string;
-  username: string;
+  email: string;
   passkeys: any[];
 }
 

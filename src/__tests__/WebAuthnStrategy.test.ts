@@ -12,7 +12,7 @@ class MockUserStore implements UserStore {
 
     async get(identifier: string, byID = false): Promise<WebAuthnUser | undefined> {
         return Object.values(this.users).find(user =>
-            byID ? user.id === identifier : user.username === identifier
+            byID ? user.id === identifier : user.email === identifier
         );
     }
 
@@ -61,19 +61,19 @@ describe("WebAuthnStrategy", () => {
     test("should generate registration challenge", async () => {
         // Provide a path that indicates registration
         const req = { path: "/register" } as Request;
-        const username = "testuser";
+        const email = "test@example.com";
 
-        const options = await strategy.registerChallenge(req, username);
+        const options = await strategy.registerChallenge(req, email);
         expect(options).toHaveProperty("challenge");
         expect(typeof options.challenge).toBe("string");
     });
 
     test("should complete registration callback and fail verification", async () => {
         const req = { path: "/register" } as Request;
-        const username = "testuser";
+        const email = "test@example.com";
         const userID = uuidv4();
 
-        await userStore.save({ id: userID, username, passkeys: [] });
+        await userStore.save({ id: userID, email, passkeys: [] });
         await challengeStore.save(userID, "mocked-challenge");
 
         const credential: RegistrationResponseJSON = {
@@ -87,7 +87,7 @@ describe("WebAuthnStrategy", () => {
             type: "public-key",
         };
 
-        await expect(strategy.registerCallback(req, username, credential)).rejects.toThrow(
+        await expect(strategy.registerCallback(req, email, credential)).rejects.toThrow(
             "Credential ID was not base64url-encoded"
         );
     });
@@ -95,12 +95,12 @@ describe("WebAuthnStrategy", () => {
     test("should generate authentication challenge", async () => {
         // Provide a path that indicates login
         const req = { path: "/login" } as Request;
-        const username = "testuser";
+        const email = "test@example.com";
         const userID = uuidv4();
 
         await userStore.save({
             id: userID,
-            username,
+            email,
             passkeys: [
                 {
                     id: "test-id",
@@ -111,27 +111,27 @@ describe("WebAuthnStrategy", () => {
             ],
         });
 
-        const options = await strategy.loginChallenge(req, username);
+        const options = await strategy.loginChallenge(req, email);
         expect(options).toHaveProperty("challenge");
         expect(typeof options.challenge).toBe("string");
     });
 
     test("should fail authentication when no user exists", async () => {
         const req = { path: "/login" } as Request;
-        const username = "nonexistentuser";
+        const email = "nonexistent@example.com";
 
-        await expect(strategy.loginChallenge(req, username)).rejects.toThrow("User not found");
+        await expect(strategy.loginChallenge(req, email)).rejects.toThrow("User not found");
     });
 
-    test("should fail registration for missing username", async () => {
+    test("should fail registration for missing email", async () => {
         const req = {} as Request;
 
-        await expect(strategy.registerChallenge(req, "")).rejects.toThrow("Username required");
+        await expect(strategy.registerChallenge(req, "")).rejects.toThrow("Email required");
     });
 
     test("should handle missing user during login callback", async () => {
         const req = { path: "/login" } as Request;
-        const username = "nonexistentuser";
+        const email = "nonexistent@example.com";
         const credential: AuthenticationResponseJSON = {
             id: "test-id",
             rawId: "test-raw-id",
@@ -145,19 +145,19 @@ describe("WebAuthnStrategy", () => {
             type: "public-key",
         };
 
-        await expect(strategy.loginCallback(req, username, credential)).rejects.toThrow(
+        await expect(strategy.loginCallback(req, email, credential)).rejects.toThrow(
             "User not found"
         );
     });
 
     test("should handle missing challenge during login callback", async () => {
         const req = { path: "/login" } as Request;
-        const username = "testuser";
+        const email = "test@example.com";
         const userID = uuidv4();
 
         await userStore.save({
             id: userID,
-            username,
+            email,
             passkeys: [
                 {
                     id: "test-id",
@@ -182,17 +182,17 @@ describe("WebAuthnStrategy", () => {
             type: "public-key",
         };
 
-        await expect(strategy.loginCallback(req, username, credential)).rejects.toThrow(
+        await expect(strategy.loginCallback(req, email, credential)).rejects.toThrow(
             "Challenge not found"
         );
     });
 
     test("should handle missing passkey during login callback", async () => {
         const req = { path: "/login" } as Request;
-        const username = "testuser";
+        const email = "test@example.com";
         const userID = uuidv4();
 
-        await userStore.save({ id: userID, username, passkeys: [] });
+        await userStore.save({ id: userID, email, passkeys: [] });
         await challengeStore.save(userID, "mocked-challenge");
 
         const credential: AuthenticationResponseJSON = {
@@ -208,7 +208,7 @@ describe("WebAuthnStrategy", () => {
             type: "public-key",
         };
 
-        await expect(strategy.loginCallback(req, username, credential)).rejects.toThrow(
+        await expect(strategy.loginCallback(req, email, credential)).rejects.toThrow(
             "Passkey not found"
         );
     });

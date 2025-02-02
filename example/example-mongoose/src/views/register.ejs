@@ -19,15 +19,15 @@
 
         async function startWebAuthnRegistration(event) {
             event.preventDefault();
-            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
             const submitButton = document.getElementById('register-btn');
 
-            if (!username) return alert('Username is required!');
+            if (!email) return alert('Email is required!');
             submitButton.disabled = true;
 
             try {
                 // Step 1: Request a registration challenge (GET)
-                const challengeResponse = await fetch(`/webauthn/register?username=${encodeURIComponent(username)}`, {
+                const challengeResponse = await fetch(`/webauthn/register?email=${encodeURIComponent(email)}`, {
                     method: 'GET',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -73,7 +73,7 @@
                 const registerCallbackResponse = await fetch('/webauthn/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, credential: registrationResponse })
+                    body: JSON.stringify({ email, credential: registrationResponse })
                 });
 
                 const result = await registerCallbackResponse.json();
@@ -94,7 +94,7 @@
 <body>
 <h1>Register</h1>
 <form onsubmit="startWebAuthnRegistration(event)">
-    <input type="text" id="username" placeholder="Enter Username" required>
+    <input type="email" id="email" placeholder="Enter Email" required>
     <button type="submit" id="register-btn">Register</button>
 </form>
 </body>

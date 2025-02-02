@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 // The IUser interface does not include a custom userID; MongoDB generates _id automatically.
 export interface IUser extends Document {
+    email: string;
     username: string;
     passkeys: {
         id: string;
@@ -12,7 +13,15 @@ export interface IUser extends Document {
 }
 
 const UserSchema = new Schema<IUser>({
-    username: { type: String, required: true, unique: true, index: true },
+    email: {
+        type: String,
+        required: [true, "Email can't be blank"],
+        unique: true,
+        lowercase: true,
+        index: true,
+        match: [/\S+@\S+\.\S+/, "is invalid"],
+    },
+    username: { type: String, unique: true, index: true },
     passkeys: {
         type: [
             {

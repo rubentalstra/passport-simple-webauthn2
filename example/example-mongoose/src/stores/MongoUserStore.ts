@@ -3,13 +3,13 @@ import {UserStore, WebAuthnUser} from "passport-simple-webauthn2";
 
 export class MongoUserStore implements UserStore {
     async get(identifier: string, byID = false): Promise<WebAuthnUser | undefined> {
-        const query = byID ? { _id: identifier } : { username: identifier };
+        const query = byID ? { _id: identifier } : { email: identifier };
         const user = await User.findOne(query).lean().exec();
         if (user) {
             // Map MongoDB's _id to our id field.
             return {
                 id: user._id.toString(),
-                username: user.username,
+                email: user.email,
                 passkeys: user.passkeys,
             };
         }
@@ -20,19 +20,19 @@ export class MongoUserStore implements UserStore {
         // If the user doesn't have an id, let the database generate one.
         if (!user.id) {
             const createdUser = await User.create({
-                username: user.username,
+                email: user.email,
                 passkeys: user.passkeys,
             });
             return {
                 id: createdUser.id.toString(),
-                username: createdUser.username,
+                email: createdUser.email,
                 passkeys: createdUser.passkeys,
             };
         } else {
             // Update the existing document.
             const updatedUser = await User.findByIdAndUpdate(
                 user.id,
-                { username: user.username, passkeys: user.passkeys },
+                {  email: user.email, passkeys: user.passkeys },
                 { new: true, upsert: true }
             ).exec();
             if (!updatedUser) {
@@ -40,7 +40,7 @@ export class MongoUserStore implements UserStore {
             }
             return {
                 id: updatedUser.id.toString(),
-                username: updatedUser.username,
+                email: updatedUser.email,
                 passkeys: updatedUser.passkeys,
             };
         }

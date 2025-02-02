@@ -19,15 +19,15 @@
 
         async function startWebAuthnAuthentication(event) {
             event.preventDefault();
-            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
             const submitButton = document.getElementById('login-btn');
 
-            if (!username) return alert('Username is required!');
+            if (!email) return alert('Email is required!');
             submitButton.disabled = true;
 
             try {
                 // Step 1: Request a login challenge (GET)
-                const challengeResponse = await fetch(`/webauthn/login?username=${encodeURIComponent(username)}`, {
+                const challengeResponse = await fetch(`/webauthn/login?email=${encodeURIComponent(email)}`, {
                     method: 'GET',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -72,7 +72,7 @@
                 const loginCallbackResponse = await fetch('/webauthn/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, credential: authenticationResponse })
+                    body: JSON.stringify({ email, credential: authenticationResponse })
                 });
 
                 const result = await loginCallbackResponse.json();
@@ -93,7 +93,7 @@
 <body>
 <h1>Login</h1>
 <form onsubmit="startWebAuthnAuthentication(event)">
-    <input type="text" id="username" placeholder="Enter Username" required>
+    <input type="email" id="email" placeholder="Enter Email" required>
     <button type="submit" id="login-btn">Login</button>
 </form>
 </body>

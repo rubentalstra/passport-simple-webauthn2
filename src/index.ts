@@ -83,18 +83,16 @@ export class WebAuthnStrategy extends PassportStrategy {
 
   async registerChallenge(
     req: Request,
-    username: string,
+    email: string,
   ): Promise<Record<string, unknown>> {
-    this.debugLog(`registerChallenge called for username: ${username}`);
-    if (!username) throw new Error("Username required");
+    this.debugLog(`registerChallenge called for email: ${email}`);
+    if (!email) throw new Error("Email required");
 
-    let user = await this.getUser(username);
+    let user = await this.getUser(email);
     if (!user) {
-      this.debugLog(
-        `User not found. Creating new user for username: ${username}`,
-      );
+      this.debugLog(`User not found. Creating new user for email: ${email}`);
       // Create a new user object without an id, so that the DB can generate one.
-      user = { username, passkeys: [] };
+      user = { email, passkeys: [] } as WebAuthnUser;
       user = await this.userStore.save(user);
       // Ensure that an id was generated.
       if (!user.id) {
@@ -112,7 +110,8 @@ export class WebAuthnStrategy extends PassportStrategy {
       rpName: this.rpName || "WebAuthn Demo",
       rpID: this.rpID || "localhost",
       userID: Buffer.from(userId, "utf-8"),
-      userName: user.username,
+      // Use email as the userName for registration
+      userName: user.email,
       attestationType: "none",
       excludeCredentials: user.passkeys.map((cred) => ({
         id: cred.id,
@@ -139,7 +138,7 @@ export class WebAuthnStrategy extends PassportStrategy {
     this.debugLog("Serialized registration options", serializedOptions);
 
     this.logger.info(
-      `Registration challenge generated for user ${user.username} (id: ${userId})`,
+      `Registration challenge generated for user ${user.email} (id: ${userId})`,
     );
 
     return serializedOptions;
@@ -147,13 +146,13 @@ export class WebAuthnStrategy extends PassportStrategy {
 
   async registerCallback(
     req: Request,
-    username: string,
+    email: string,
     credential: RegistrationResponseJSON,
   ): Promise<WebAuthnUser> {
-    this.debugLog(`registerCallback called for username: ${username}`);
-    const user = await this.getUser(username);
+    this.debugLog(`registerCallback called for email: ${email}`);
+    const user = await this.getUser(email);
     if (!user) {
-      this.logger.error(`User not found for username: ${username}`);
+      this.logger.error(`User not found for email: ${email}`);
       throw new Error("User not found");
     }
     if (!user.id) {
@@ -223,12 +222,12 @@ export class WebAuthnStrategy extends PassportStrategy {
 
   async loginChallenge(
     req: Request,
-    username: string,
+    email: string,
   ): Promise<Record<string, unknown>> {
-    this.debugLog(`loginChallenge called for username: ${username}`);
-    const user = await this.getUser(username);
+    this.debugLog(`loginChallenge called for email: ${email}`);
+    const user = await this.getUser(email);
     if (!user) {
-      this.logger.error(`User not found for username: ${username}`);
+      this.logger.error(`User not found for email: ${email}`);
       throw new Error("User not found");
     }
     if (!user.id) {
@@ -268,20 +267,20 @@ export class WebAuthnStrategy extends PassportStrategy {
     this.debugLog("Serialized authentication options", serializedOptions);
 
     this.logger.info(
-      `Login challenge generated for user ${user.username} (id: ${user.id})`,
+      `Login challenge generated for user ${user.email} (id: ${user.id})`,
     );
     return serializedOptions;
   }
 
   async loginCallback(
     req: Request,
-    username: string,
+    email: string,
     credential: AuthenticationResponseJSON,
   ): Promise<WebAuthnUser> {
-    this.debugLog(`loginCallback called for username: ${username}`);
-    const user = await this.getUser(username);
+    this.debugLog(`loginCallback called for email: ${email}`);
+    const user = await this.getUser(email);
     if (!user) {
-      this.logger.error(`User not found for username: ${username}`);
+      this.logger.error(`User not found for email: ${email}`);
       throw new Error("User not found");
     }
     if (!user.id) {
@@ -377,18 +376,19 @@ export class WebAuthnStrategy extends PassportStrategy {
       );
     }
 
-    const username = req.body.username || req.query.username;
-    if (!username) {
-      return this.error(new Error("Username is required."));
+    // Use email for identification (instead of username)
+    const email = req.body.email || req.query.email;
+    if (!email) {
+      return this.error(new Error("Email is required."));
     }
 
     try {
       if (req.method === "GET") {
         if (mode === "register") {
-          const challenge = await this.registerChallenge(req, username);
+          const challenge = await this.registerChallenge(req, email);
           return this.success(challenge);
         } else if (mode === "login") {
-          const challenge = await this.loginChallenge(req, username);
+          const challenge = await this.loginChallenge(req, email);
           return this.success(challenge);
         }
       } else if (req.method === "POST") {
@@ -399,10 +399,10 @@ export class WebAuthnStrategy extends PassportStrategy {
           );
         }
         if (mode === "register") {
-          const result = await this.registerCallback(req, username, credential);
+          const result = await this.registerCallback(req, email, credential);
           return this.success(result);
         } else if (mode === "login") {
-          const result = await this.loginCallback(req, username, credential);
+          const result = await this.loginCallback(req, email, credential);
           return this.success(result);
         }
       } else {
