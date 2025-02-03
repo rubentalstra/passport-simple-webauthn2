@@ -27,9 +27,9 @@ function decodeBase64URL(str: string): string {
     return Buffer.from(str, "base64url").toString("utf-8");
 }
 
-// Dummy data
+// Dummy data and options
 const dummyChallengeBuffer = Buffer.from("dummy-challenge");
-const dummyChallengeEncoded = dummyChallengeBuffer.toString("base64url"); // should be "ZHVtbXktY2hhbGxlbmdl"
+const dummyChallengeEncoded = dummyChallengeBuffer.toString("base64url"); // e.g. "ZHVtbXktY2hhbGxlbmdl"
 const dummyCredentialID = "test-id";
 
 const dummyRegistrationOptions = {
@@ -39,7 +39,7 @@ const dummyRegistrationOptions = {
     userID: Buffer.from("dummy-user-id", "utf-8"),
     userName: "test@example.com",
     attestationType: "none",
-    excludeCredentials: [],
+    excludeCredentials: [], // This will be overridden if user has passkeys.
     authenticatorSelection: {
         userVerification: "required",
         residentKey: "required",
@@ -95,6 +95,8 @@ class MockUserStore implements UserStore {
     }
 
     async save(user: WebAuthnUser): Promise<WebAuthnUser> {
+        // In a normal situation, an ID is assigned.
+        // (Some tests will override this behavior.)
         if (!user.id) {
             user.id = uuidv4();
         }
@@ -151,7 +153,7 @@ describe("WebAuthnStrategy", () => {
             debug: true,
         });
 
-        // Ensure that strategy.error is defined to avoid "this.error is not a function"
+        // Stub error method to avoid "this.error is not a function"
         strategy.error = jest.fn();
 
         // Set default mocked external function responses.
@@ -177,6 +179,42 @@ describe("WebAuthnStrategy", () => {
             const storedChallenge = await challengeStore.get(user.id);
             expect(decodeBase64URL(storedChallenge!)).toBe("dummy-challenge");
         }
+    });
+
+    test("should include excludeCredentials in registration options if user has passkeys", async () => {
+        const email = "existing@example.com";
+        // Create a user with an existing passkey.
+        const existingUser: WebAuthnUser = {
+            email,
+            id: uuidv4(),
+            passkeys: [
+                {
+                    id: "existing-cred",
+                    publicKey: Buffer.from("existing-key"),
+                    counter: 0,
+                    transports: ["usb"],
+                },
+            ],
+        };
+        await userStore.save(existingUser);
+        const req = createRequest({ method: "GET", path: "/register" });
+        await strategy.registerChallenge(req, email);
+
+        // Verify that generateRegistrationOptions was called with an excludeCredentials value.
+        expect(generateRegistrationOptions).toHaveBeenCalled();
+        const callArgs = (generateRegistrationOptions as jest.Mock).mock.calls[0][0];
+        expect(callArgs.excludeCredentials).toEqual([
+            { id: "existing-cred", type: "public-key", transports: ["usb"] },
+        ]);
+    });
+
+    test("should throw error if user creation returns no id", async () => {
+        const email = "noid@example.com";
+        // Override userStore.save to simulate a failure to assign an id.
+        userStore.save = jest.fn().mockResolvedValue({ email, passkeys: [] });
+        const req = createRequest({ method: "GET", path: "/register" });
+        await expect(strategy.registerChallenge(req, email))
+            .rejects.toThrow("User creation failed: no id returned from the stores");
     });
 
     test("should complete registration callback successfully", async () => {
@@ -475,12 +513,24 @@ describe("WebAuthnStrategy", () => {
             expect(loginCallbackSpy).toHaveBeenCalledWith(req, email, dummyAuthenticationResponse);
         });
 
-        test("should throw error if email is missing in authenticate", async () => {
+        test("should throw error if email is missing in GET authenticate", async () => {
             const req = createRequest({ method: "GET", path: "/login", query: {} });
             const errorSpy = jest.fn();
             strategy.error = errorSpy;
             await strategy.authenticate(req);
-            expect(errorSpy).toHaveBeenCalled();
+            expect(errorSpy).toHaveBeenCalledWith(new Error("Email is required."));
+        });
+
+        test("should throw error if credential is missing in POST authenticate", async () => {
+            const req = createRequest({
+                method: "POST",
+                path: "/register",
+                body: { email: "test@example.com" },
+            });
+            const errorSpy = jest.fn();
+            strategy.error = errorSpy;
+            await strategy.authenticate(req);
+            expect(errorSpy).toHaveBeenCalledWith(new Error("Credential is required in the request body."));
         });
 
         test("should throw error for unsupported HTTP methods", async () => {
