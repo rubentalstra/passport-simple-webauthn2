@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/npm/l/passport-simple-webauthn2)](LICENSE)
 [![Build](https://img.shields.io/github/actions/workflow/status/rubentalstra/passport-simple-webauthn2/publish.yml?branch=main)](https://github.com/rubentalstra/passport-simple-webauthn2/actions)
 [![Downloads](https://img.shields.io/npm/dt/passport-simple-webauthn2)](https://www.npmjs.com/package/passport-simple-webauthn2)
+[![Maintainability](https://api.codeclimate.com/v1/badges/7811835787034e6b7e00/maintainability)](https://codeclimate.com/github/rubentalstra/passport-simple-webauthn2/maintainability)
 
 **Passport Strategy for authenticating with Web Authentication (WebAuthn) using FIDO2 Passkeys.**
 
