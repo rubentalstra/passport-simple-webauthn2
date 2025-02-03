@@ -29,11 +29,11 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
-      # Install dependencies using npm (prefer npm ci if a package-lock.json is present)
+      # Install dependencies using npm (using npm ci for a clean install)
       - run: npm ci
-      # Build the project
+      # Build the project using the build script defined in package.json
       - run: npm run build
-      # Run tests
+      # Run tests using the test script defined in package.json
       - run: npm test
 
   coverage:
@@ -49,10 +49,10 @@ jobs:
           node-version: '21'
       - run: npm ci
       - run: npm run build
-      # Run the coverage command (ensure that you have a script named 'coverage' in your package.json)
+      # Run the coverage command. Note: We are using 'test:coverage' as defined in package.json.
       - uses: paambaati/codeclimate-action@v5
         env:
           CC_TEST_REPORTER_ID: ${{ secrets.CC_TEST_REPORTER_ID }}
         with:
-          coverageCommand: npm run coverage
+          coverageCommand: npm run test:coverage
           debug: true
