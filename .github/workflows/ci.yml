@@ -18,10 +18,12 @@ jobs:
   test:
     strategy:
       matrix:
-        platform: [ ubuntu-latest]
+        platform: [ ubuntu-latest ]
         node: [ '21' ]
     name: test/node ${{ matrix.node }}/${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
@@ -36,6 +38,8 @@ jobs:
     needs: [ test ]
     name: coverage
     runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
