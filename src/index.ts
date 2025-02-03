@@ -12,8 +12,9 @@ import type { Request } from "express";
 import winston from "winston";
 import {
   bufferToBase64URL,
-  serializeAuthenticationOptions,
-  serializeRegistrationOptions,
+  getExpectedOrigin,
+  normalizePublicKey,
+  serializeOptions,
 } from "./utils";
 import type { UserStore, WebAuthnUser, ChallengeStore } from "./types";
 import type {
@@ -74,12 +75,38 @@ export class WebAuthnStrategy extends PassportStrategy {
     }
   }
 
+  /**
+   * Retrieve a user by email or id.
+   */
   private async getUser(
     identifier: string,
     byID = false,
   ): Promise<WebAuthnUser | undefined> {
     return this.userStore.get(identifier, byID);
   }
+
+  /**
+   * Retrieve the user if exists; otherwise, create and save a new user.
+   */
+  private async getOrCreateUser(email: string): Promise<WebAuthnUser> {
+    let user = await this.getUser(email);
+    if (!user) {
+      this.debugLog(`User not found. Creating new user for email: ${email}`);
+      user = { email, passkeys: [] } as WebAuthnUser;
+      user = await this.userStore.save(user);
+      if (!user.id) {
+        throw new Error("User creation failed: no id returned from the stores");
+      }
+      this.debugLog(`New user created with id: ${user.id}`);
+    } else {
+      this.debugLog(`User found with id: ${user.id}`);
+    }
+    return user;
+  }
+
+  // ---------------------
+  // Registration Flow
+  // ---------------------
 
   async registerChallenge(
     req: Request,
@@ -88,29 +115,14 @@ export class WebAuthnStrategy extends PassportStrategy {
     this.debugLog(`registerChallenge called for email: ${email}`);
     if (!email) throw new Error("Email required");
 
-    let user = await this.getUser(email);
-    if (!user) {
-      this.debugLog(`User not found. Creating new user for email: ${email}`);
-      // Create a new user object without an id, so that the DB can generate one.
-      user = { email, passkeys: [] } as WebAuthnUser;
-      user = await this.userStore.save(user);
-      // Ensure that an id was generated.
-      if (!user.id) {
-        throw new Error("User creation failed: no id returned from the stores");
-      }
-      this.debugLog(`New user created with id: ${user.id}`);
-    } else {
-      this.debugLog(`User found with id: ${user.id}`);
-    }
-
-    // At this point, we know that user.id is defined.
+    const user = await this.getOrCreateUser(email);
     const userId: string = user.id!;
     this.debugLog("Generating registration options");
+
     const options = await generateRegistrationOptions({
       rpName: this.rpName || "WebAuthn Demo",
       rpID: this.rpID || "localhost",
       userID: Buffer.from(userId, "utf-8"),
-      // Use email as the userName for registration
       userName: user.email,
       attestationType: "none",
       excludeCredentials: user.passkeys.map((cred) => ({
@@ -124,24 +136,14 @@ export class WebAuthnStrategy extends PassportStrategy {
         authenticatorAttachment: "platform",
       },
     });
-    this.debugLog("Registration options generated", {
-      challenge: bufferToBase64URL(options.challenge),
-      options,
-    });
 
-    // Save the challenge (as a base64url string)
     const challengeStr = bufferToBase64URL(options.challenge);
     await this.challengeStore.save(userId, challengeStr);
-    this.debugLog(`Challenge saved for user id ${userId}: ${challengeStr}`);
-
-    const serializedOptions = serializeRegistrationOptions(options);
-    this.debugLog("Serialized registration options", serializedOptions);
-
     this.logger.info(
       `Registration challenge generated for user ${user.email} (id: ${userId})`,
     );
 
-    return serializedOptions;
+    return serializeOptions(options);
   }
 
   async registerCallback(
@@ -151,38 +153,21 @@ export class WebAuthnStrategy extends PassportStrategy {
   ): Promise<WebAuthnUser> {
     this.debugLog(`registerCallback called for email: ${email}`);
     const user = await this.getUser(email);
-    if (!user) {
-      this.logger.error(`User not found for email: ${email}`);
-      throw new Error("User not found");
-    }
-    if (!user.id) {
-      throw new Error("User id is missing");
-    }
-    this.debugLog(`User found with id: ${user.id}`);
+    if (!user || !user.id) throw new Error("User not found or id is missing");
 
     const challenge = await this.challengeStore.get(user.id);
-    if (!challenge) {
-      this.logger.error(`Challenge not found for user id: ${user.id}`);
-      throw new Error("Challenge not found");
-    }
-    this.debugLog(`Challenge retrieved for user id ${user.id}: ${challenge}`);
+    if (!challenge) throw new Error("Challenge not found");
 
     try {
       this.debugLog("Verifying registration response", credential);
       const verification = await verifyRegistrationResponse({
         response: credential,
         expectedChallenge: challenge,
-        expectedOrigin:
-          process.env.NODE_ENV === "development"
-            ? `http://${this.rpID}`
-            : `https://${this.rpID}`,
+        expectedOrigin: getExpectedOrigin(this.rpID),
         expectedRPID: this.rpID || "localhost",
         requireUserVerification: true,
       });
-      this.debugLog("Registration response verification result", verification);
-
       await this.challengeStore.delete(user.id);
-      this.debugLog(`Challenge deleted for user id ${user.id}`);
 
       if (!verification.verified || !verification.registrationInfo) {
         this.logger.error("Registration verification failed");
@@ -193,11 +178,7 @@ export class WebAuthnStrategy extends PassportStrategy {
         verification.registrationInfo.credential;
       this.debugLog("Storing new passkey", { id, counter, transports });
 
-      // Convert publicKey to Buffer
-      const publicKeyBuffer = Buffer.from(
-        typeof publicKey === "object" ? Object.values(publicKey) : publicKey,
-      );
-
+      const publicKeyBuffer = normalizePublicKey(publicKey);
       const newPasskey = {
         id,
         publicKey: publicKeyBuffer,
@@ -205,20 +186,21 @@ export class WebAuthnStrategy extends PassportStrategy {
         transports,
       };
 
-      // Update the user's passkeys and save the user
       user.passkeys.push(newPasskey);
       const updatedUser = await this.userStore.save(user);
       this.debugLog("User updated with new passkey", updatedUser);
-
       return updatedUser;
     } catch (error) {
       const errorMsg =
         error instanceof Error ? error.message : "Registration failed";
       this.logger.error(`Error during registration callback: ${errorMsg}`);
-      this.debugLog(`Error during registration callback: ${errorMsg}`);
       throw new Error(errorMsg);
     }
   }
+
+  // ---------------------
+  // Login Flow
+  // ---------------------
 
   async loginChallenge(
     req: Request,
@@ -226,22 +208,13 @@ export class WebAuthnStrategy extends PassportStrategy {
   ): Promise<Record<string, unknown>> {
     this.debugLog(`loginChallenge called for email: ${email}`);
     const user = await this.getUser(email);
-    if (!user) {
-      this.logger.error(`User not found for email: ${email}`);
-      throw new Error("User not found");
-    }
-    if (!user.id) {
-      throw new Error("User id is missing");
-    }
-    this.debugLog(`User found with id: ${user.id}`);
+    if (!user || !user.id) throw new Error("User not found or id is missing");
 
     // Filter for platform authenticators.
     const platformCredentials = user.passkeys.filter((cred) =>
       cred.transports?.includes("internal"),
     );
-    this.debugLog("Filtered platform credentials", platformCredentials);
 
-    this.debugLog("Generating authentication options");
     const options = await generateAuthenticationOptions({
       rpID: this.rpID || "localhost",
       userVerification: "required",
@@ -254,22 +227,13 @@ export class WebAuthnStrategy extends PassportStrategy {
             }))
           : undefined,
     });
-    this.debugLog("Authentication options generated", {
-      challenge: bufferToBase64URL(options.challenge),
-      options,
-    });
 
     const challengeStr = bufferToBase64URL(options.challenge);
     await this.challengeStore.save(user.id, challengeStr);
-    this.debugLog(`Challenge saved for user id ${user.id}: ${challengeStr}`);
-
-    const serializedOptions = serializeAuthenticationOptions(options);
-    this.debugLog("Serialized authentication options", serializedOptions);
-
     this.logger.info(
       `Login challenge generated for user ${user.email} (id: ${user.id})`,
     );
-    return serializedOptions;
+    return serializeOptions(options);
   }
 
   async loginCallback(
@@ -279,48 +243,26 @@ export class WebAuthnStrategy extends PassportStrategy {
   ): Promise<WebAuthnUser> {
     this.debugLog(`loginCallback called for email: ${email}`);
     const user = await this.getUser(email);
-    if (!user) {
-      this.logger.error(`User not found for email: ${email}`);
-      throw new Error("User not found");
-    }
-    if (!user.id) {
-      throw new Error("User id is missing");
-    }
-    this.debugLog(`User found with id: ${user.id}`);
+    if (!user || !user.id) throw new Error("User not found or id is missing");
 
     const challenge = await this.challengeStore.get(user.id);
-    if (!challenge) {
-      this.logger.error(`Challenge not found for user id: ${user.id}`);
-      throw new Error("Challenge not found");
-    }
-    this.debugLog(`Challenge retrieved for user id ${user.id}: ${challenge}`);
+    if (!challenge) throw new Error("Challenge not found");
 
-    // Find the passkey by its id
     const passkey = user.passkeys.find((p) => p.id === credential.id);
     if (!passkey) {
       this.logger.error(
         `Passkey not found for credential id: ${credential.id}`,
       );
-      this.debugLog(`Passkey not found for credential id: ${credential.id}`);
       throw new Error("Passkey not found");
     }
-    this.debugLog("Passkey found", passkey);
 
     try {
-      // Normalize the stored public key
-      const storedPublicKey =
-        passkey.publicKey && (passkey.publicKey as any).buffer
-          ? Buffer.from((passkey.publicKey as any).buffer)
-          : Buffer.from(passkey.publicKey);
-
+      const storedPublicKey = normalizePublicKey(passkey.publicKey);
       this.debugLog("Verifying authentication response", credential);
       const verification = await verifyAuthenticationResponse({
         response: credential,
         expectedChallenge: challenge,
-        expectedOrigin:
-          process.env.NODE_ENV === "development"
-            ? `http://${this.rpID}`
-            : `https://${this.rpID}`,
+        expectedOrigin: getExpectedOrigin(this.rpID),
         expectedRPID: this.rpID,
         credential: {
           id: passkey.id,
@@ -330,86 +272,77 @@ export class WebAuthnStrategy extends PassportStrategy {
         },
         requireUserVerification: true,
       });
-      this.debugLog(
-        "Authentication response verification result",
-        verification,
-      );
-
       await this.challengeStore.delete(user.id);
-      this.debugLog(`Challenge deleted for user id ${user.id}`);
 
       if (!verification.verified) {
         this.logger.error("Authentication verification failed");
-        this.debugLog("Authentication verification failed");
         throw new Error("Verification failed");
       }
 
-      // Update the counter on the passkey and save the user
       passkey.counter = verification.authenticationInfo.newCounter;
       const updatedUser = await this.userStore.save(user);
       this.debugLog("User updated with new counter", updatedUser);
-
       return updatedUser;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Login failed";
       this.logger.error(`Error during login callback: ${errorMsg}`);
-      this.debugLog(`Error during login callback: ${errorMsg}`);
       throw new Error(errorMsg);
     }
   }
 
+  // ---------------------
+  // Passport Strategy Integration
+  // ---------------------
+
   /**
    * Fully integrated authenticate() method.
-   * It infers the mode (register or login) from the request path.
+   * Infers the mode (register or login) from the request path.
    */
   async authenticate(req: Request, _options?: any): Promise<void> {
-    let mode: "register" | "login";
-    if (req.path.toLowerCase().includes("register")) {
-      mode = "register";
-    } else if (req.path.toLowerCase().includes("login")) {
-      mode = "login";
-    } else {
-      return this.error(
-        new Error(
-          "Could not infer mode. Please ensure the URL contains either register or login.",
-        ),
-      );
-    }
-
-    // Use email for identification (instead of username)
-    const email = req.body.email || req.query.email;
-    if (!email) {
-      return this.error(new Error("Email is required."));
-    }
-
     try {
-      if (req.method === "GET") {
-        if (mode === "register") {
-          const challenge = await this.registerChallenge(req, email);
-          return this.success(challenge);
-        } else if (mode === "login") {
-          const challenge = await this.loginChallenge(req, email);
-          return this.success(challenge);
-        }
-      } else if (req.method === "POST") {
-        const credential = req.body.credential;
-        if (!credential) {
-          return this.error(
-            new Error("Credential is required in the request body."),
-          );
-        }
-        if (mode === "register") {
-          const result = await this.registerCallback(req, email, credential);
-          return this.success(result);
-        } else if (mode === "login") {
-          const result = await this.loginCallback(req, email, credential);
-          return this.success(result);
-        }
-      } else {
-        return this.error(new Error("Unsupported HTTP method."));
-      }
+      const mode = this.determineMode(req.path);
+      const email = req.body.email || req.query.email;
+      if (!email) throw new Error("Email is required.");
+      const result = await this.handleRequestByMethod(req, mode, email);
+      this.success(result);
     } catch (err: any) {
-      return this.error(err);
+      this.error(err);
+    }
+  }
+
+  /**
+   * Determines the mode based on the request path.
+   */
+  private determineMode(path: string): "register" | "login" {
+    const lowerPath = path.toLowerCase();
+    if (lowerPath.includes("register")) return "register";
+    if (lowerPath.includes("login")) return "login";
+    throw new Error(
+      "Could not infer mode. Please ensure the URL contains either register or login.",
+    );
+  }
+
+  /**
+   * Delegates the request based on HTTP method and mode.
+   */
+  private async handleRequestByMethod(
+    req: Request,
+    mode: "register" | "login",
+    email: string,
+  ): Promise<any> {
+    if (req.method === "GET") {
+      return mode === "register"
+        ? this.registerChallenge(req, email)
+        : this.loginChallenge(req, email);
+    } else if (req.method === "POST") {
+      const credential = req.body.credential;
+      if (!credential)
+        throw new Error("Credential is required in the request body.");
+      return mode === "register"
+        ? this.registerCallback(req, email, credential)
+        : this.loginCallback(req, email, credential);
+    } else {
+      throw new Error("Unsupported HTTP method.");
     }
   }
 }
