@@ -19,9 +19,11 @@ jobs:
     strategy:
       matrix:
         platform: [ ubuntu-latest, macOS-latest ]
-        node: [ '12' ]
+        node: [ '12', '14' ]
     name: test/node ${{ matrix.node }}/${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
+    # Skip Node 12 on macOS since it's not available on darwin/arm64
+    if: ${{ !(matrix.platform == 'macOS-latest' && matrix.node == '12') }}
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
