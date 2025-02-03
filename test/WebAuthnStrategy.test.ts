@@ -1,5 +1,5 @@
-import { WebAuthnStrategy } from "../index";
-import type { WebAuthnUser, UserStore, ChallengeStore } from "../types";
+import { WebAuthnStrategy } from "passport-simple-webauthn2";
+import type { WebAuthnUser, UserStore, ChallengeStore } from "../src";
 import { Request } from "express";
 import { v4 as uuidv4 } from "uuid";
 import {

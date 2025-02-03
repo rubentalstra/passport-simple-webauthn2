@@ -16,7 +16,7 @@ export default [
       "coverage/",
       "docs/",
       "src/**/*.test.ts", // Exclude all test files
-      "src/__tests__/**/*.ts" // Exclude all files within __tests__ directories
+      "test/**/*.ts" // Exclude all files within test directories
     ],
     languageOptions: {
       parser: tsParser,
