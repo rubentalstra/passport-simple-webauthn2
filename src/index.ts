@@ -1,6 +1,4 @@
-/**
- * Passport Strategy that implements "Web Authn (PassKeys)"
- */
+// src/index.ts
 import { Strategy as PassportStrategy } from "passport-strategy";
 import {
   generateRegistrationOptions,
@@ -10,19 +8,23 @@ import {
 } from "@simplewebauthn/server";
 import type { Request } from "express";
 import winston from "winston";
+
 import {
   bufferToBase64URL,
   getExpectedOrigin,
   normalizePublicKey,
   serializeOptions,
 } from "./utils";
+
 import type { UserStore, WebAuthnUser, ChallengeStore } from "./types";
+
 import type {
   AuthenticationResponseJSON,
   RegistrationResponseJSON,
 } from "@simplewebauthn/server/esm/types";
 
-export { ChallengeStore, WebAuthnUser, UserStore };
+// Re-export your interfaces/types too
+export { ChallengeStore, WebAuthnUser, UserStore } from "./types";
 
 export class WebAuthnStrategy extends PassportStrategy {
   name = "webauthn";

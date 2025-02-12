@@ -1,6 +1,6 @@
 {
   "name": "passport-simple-webauthn2",
-  "version": "3.1.1",
+  "version": "3.2.0",
   "description": "Passport strategy for authenticating with Web Authentication (WebAuthn) using FIDO2 Passkeys.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -12,7 +12,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "prepare": "npm run build",
     "lint": "eslint --fix src",
     "docs": "typedoc --out docs src/index.ts",
@@ -72,6 +72,7 @@
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typedoc": "^0.27.6",
+    "tsup": "^8.3.6",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.22.0"
   },

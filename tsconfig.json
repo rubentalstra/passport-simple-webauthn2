@@ -4,12 +4,7 @@
     "emitDecoratorMetadata": true,
     "strictPropertyInitialization": false,
     "outDir": "./dist",
-    "typeRoots": [
-      "./types", "./node_modules/@types"],
-    "baseUrl": ".",
-    "paths": {
-      "passport-simple-webauthn2": ["./src/index.ts"]
-    },
+    "typeRoots": ["./types", "./node_modules/@types"],
     "module": "commonjs",
     "target": "ES6",
     "strict": true,
@@ -18,5 +13,5 @@
     "types": ["jest", "node"]
   },
   "include": ["src", "test", "types"],
-  "exclude": ["node_modules", "dist", "docs", "coverage"],
+  "exclude": ["node_modules", "dist", "docs", "coverage"]
 }
