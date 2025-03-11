@@ -541,7 +541,3 @@ npm run docs
 ```
 
 The generated docs will be available in the `docs` folder.
-
----
-
-Happy authenticating!
